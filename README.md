@@ -34,19 +34,7 @@ Text: "Professional photograph of the Apollo 11 lunar lander in a field, high qu
 
 Text: "Professional photograph of George Washington in his garden grilling steaks, detailed face, high quality, 4k", Negative Text: "painting, drawing, art", Seed: 42, Guidance Scale: 10, Inference Steps: 60, Scheduler: Euler Ancestral, Image Size: 512x512.
 
-## License
-
-The code is available under the [Universal Permissive License (UPL)](https://oss.oracle.com/licenses/upl/). It requires
-a Stable Diffusion model architecture checkpoint to work, and any Stable Diffusion models should be used under their
-licenses. There are 1000+ compatible models available
-on [Hugging Face](https://huggingface.co/models?other=stable-diffusion) each of which are licensed separately, though many use a variant of
-the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
-
-The [tokenizer onnx model](text_tokenizer/custom_op_cliptok.onnx) is taken from the 
-[C# implementation](https://github.com/cassiebreviu/StableDiffusion/), and is available under the MIT license. More 
-details on the tokenizer are available in its [README file](text_tokenizer/README.md).
-
-## Setup
+## Installation
 
 This project requires [Apache Maven](https://maven.apache.org), [Java 17 or newer](https://www.oracle.com/java/technologies/downloads/),
 a compiled ONNX Runtime extensions binary, and a Stable Diffusion model checkpoint.
@@ -105,3 +93,19 @@ point for use without the GUI, and there is an example of such usage in the `CLI
 ## Contributing
 
 This project welcomes contributions from the community. Before submitting a pull request, please [review our contribution guide](./CONTRIBUTING.md).
+
+## Security
+
+Please consult the [security guide](./SECURITY.md) for our responsible security vulnerability disclosure process
+
+## License
+
+The code is available under the [Universal Permissive License (UPL)](https://oss.oracle.com/licenses/upl/). It requires
+a Stable Diffusion model architecture checkpoint to work, and any Stable Diffusion models should be used under their
+licenses. There are 1000+ compatible models available
+on [Hugging Face](https://huggingface.co/models?other=stable-diffusion) each of which are licensed separately, though many use a variant of
+the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
+
+The [tokenizer onnx model](text_tokenizer/custom_op_cliptok.onnx) is taken from the 
+[C# implementation](https://github.com/cassiebreviu/StableDiffusion/), and is available under the MIT license. More 
+details on the tokenizer are available in its [README file](text_tokenizer/README.md).
