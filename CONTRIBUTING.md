@@ -1,5 +1,3 @@
-*Detailed instructions on how to contribute to the project, if applicable. Must include section about Oracle Contributor Agreement with link and instructions*
-
 # Contributing to this repository
 
 We welcome your contributions! There are multiple ways to contribute.
@@ -55,3 +53,4 @@ like more specific guidelines, see the [Contributor Covenant Code of Conduct][CO
 
 [OCA]: https://oca.opensource.oracle.com
 [COC]: https://www.contributor-covenant.org/version/1/4/code-of-conduct/
+

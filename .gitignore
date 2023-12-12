@@ -1,0 +1,40 @@
+*/target/
+target
+
+bin/
+.settings/
+
+.classpath
+.project
+
+# Intellij files
+*.iml
+.idea/
+
+# Vim backup files
+*~
+.*.swp
+
+# Other files
+*.er
+*.log
+*.bck
+*.so
+*.patch
+
+# Binaries
+*.jar
+*.class
+
+# Archives
+*.gz
+*.zip
+
+# Temporary stuff
+.DS_Store
+.ipynb_checkpoints
+
+# Profiling files
+*.jfr
+*.iprof
+*.jfc
