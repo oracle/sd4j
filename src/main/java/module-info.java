@@ -40,7 +40,7 @@
  * An example of using Stable Diffusion via ONNX Runtime from Java.
  * <p>
  * Has a pipeline suitable for use in other programs {@link com.oracle.labs.mlrg.sd4j.SD4J} along with
- * a JavaFX GUI and a Swing GUI.
+ * a Swing GUI.
  */
 module com.oracle.labs.mlrg.sd4j {
     requires java.logging;
