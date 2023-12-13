@@ -3,7 +3,7 @@
 This repo contains an implementation of Stable Diffusion inference running on top of ONNX Runtime,
 written in Java. It's a modified port of the [C# implementation](https://github.com/cassiebreviu/StableDiffusion/),
 with a GUI for repeated generations and support for negative text inputs. It is intended to be a
-demonstration of how to use ONNX Runtime from Java, and using best practices for ONNX Runtime to get good performance.
+demonstration of how to use ONNX Runtime from Java, and best practices for ONNX Runtime to get good performance.
 We will keep it current with the latest releases of ONNX Runtime, with appropriate updates as new performance
 related ONNX Runtime features become available through the ONNX Runtime Java API. All the code is subject to change as
 this is a code sample, any APIs in it should not be considered stable.
