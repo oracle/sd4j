@@ -1,14 +1,18 @@
 # SD4J (Stable Diffusion in Java)
 
-This repo contains an implementation of Stable Diffusion inference running on top of ONNX Runtime, 
+This repo contains an implementation of Stable Diffusion inference running on top of ONNX Runtime,
 written in Java. It's a modified port of the [C# implementation](https://github.com/cassiebreviu/StableDiffusion/),
-with a GUI for repeated generations and support for negative text inputs. It is intended to be a sample program
-demonstrating how to use ONNX Runtime from Java, and using best practices for ONNX Runtime to get good performance.
-We plan to keep it current with the latest releases of ONNX Runtime, with appropriate updates as new performance
+with a GUI for repeated generations and support for negative text inputs. It is intended to be a
+demonstration of how to use ONNX Runtime from Java, and using best practices for ONNX Runtime to get good performance.
+We will keep it current with the latest releases of ONNX Runtime, with appropriate updates as new performance
 related ONNX Runtime features become available through the ONNX Runtime Java API. All the code is subject to change as
 this is a code sample, any APIs in it should not be considered stable.
 
-The project only supports txt2img generation, it doesn't currently support img2img, upscaling or inpainting.
+This repo targets ONNX Runtime 1.14. The version number is in two parts `<sd4j-version>-<onnxruntime-version>`, and the
+initial release of sd4j is v1.0-1.14.0. We'll bump the sd4j version number if it gains new features and the ONNX Runtime
+version number as we depend on newer versions of ONNX Runtime.
+
+The project supports txt2img generation, it doesn't currently implement img2img, upscaling or inpainting.
 
 By default it uses a fp32 model, and running on a 6 core 2019 16" Intel Macbook Pro each diffusion step takes around 5s. 
 Running on better hardware, enabling the CoreML EP, or with a CUDA GPU will greatly reduce the time taken to generate an
