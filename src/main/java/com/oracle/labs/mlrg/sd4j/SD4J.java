@@ -259,7 +259,7 @@ public final class SD4J implements AutoCloseable {
      * @return The SD4J pipeline.
      */
     public static SD4J factory(String initialPath, boolean useCUDA) {
-        return factory(new SD4JConfig(initialPath, useCUDA ? ExecutionProvider.CUDA : ExecutionProvider.CPU));
+        return factory(new SD4JConfig(initialPath, useCUDA ? ExecutionProvider.CUDA : ExecutionProvider.CPU, 0));
     }
 
     /**
@@ -287,11 +287,12 @@ public final class SD4J implements AutoCloseable {
             // Initialize the library
             OrtEnvironment env = OrtEnvironment.getEnvironment();
             env.setTelemetry(false);
+            final int deviceId = config.id();
             Supplier<OrtSession.SessionOptions> optsSupplier = switch (config.provider) {
                 case CUDA -> () -> {
                     try {
                         var opts = new OrtSession.SessionOptions();
-                        var cudaOpts = new OrtCUDAProviderOptions(0);
+                        var cudaOpts = new OrtCUDAProviderOptions(deviceId);
                         cudaOpts.add("arena_extend_strategy","kSameAsRequested");
                         cudaOpts.add("cudnn_conv_algo_search","DEFAULT");
                         cudaOpts.add("do_copy_in_default_stream","1");
@@ -319,7 +320,7 @@ public final class SD4J implements AutoCloseable {
                         var opts = new OrtSession.SessionOptions();
                         opts.setInterOpNumThreads(0);
                         opts.setIntraOpNumThreads(0);
-                        opts.addDirectML(0);
+                        opts.addDirectML(deviceId);
                         return opts;
                     } catch (OrtException e) {
                         throw new IllegalStateException("Failed to construct session options", e);
@@ -446,9 +447,9 @@ public final class SD4J implements AutoCloseable {
      * Record for the SD4J configuration.
      * @param modelPath The path to the onnx models.
      * @param provider The execution provider to use.
+     * @param id The device id.
      */
-    public record SD4JConfig(String modelPath, ExecutionProvider provider) {
-
+    public record SD4JConfig(String modelPath, ExecutionProvider provider, int id) {
         /**
          * Parses the arguments into a config.
          * @param args The arguments.
@@ -457,6 +458,7 @@ public final class SD4J implements AutoCloseable {
         public static Optional<SD4JConfig> parseArgs(String[] args) {
             String modelPath = "";
             String ep = "";
+            int id = 0;
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--help", "--usage" -> {
@@ -484,6 +486,17 @@ public final class SD4J implements AutoCloseable {
                             ep = args[i];
                         }
                     }
+                    case "--device-id" -> {
+                        // check if there's another argument, otherwise return empty
+                        if (i == args.length - 1) {
+                            // No id
+                            return Optional.empty();
+                        } else {
+                            // Consume argument
+                            i++;
+                            id = Integer.parseInt(args[i]);
+                        }
+                    }
                     default -> {
                         // Unexpected argument
                         logger.warning("Unexpected argument '" + args[i] + "'");
@@ -491,7 +504,7 @@ public final class SD4J implements AutoCloseable {
                     }
                 }
             }
-            return Optional.of(new SD4JConfig(modelPath, ExecutionProvider.lookup(ep)));
+            return Optional.of(new SD4JConfig(modelPath, ExecutionProvider.lookup(ep), id));
         }
 
         /**
@@ -499,7 +512,7 @@ public final class SD4J implements AutoCloseable {
          * @return The help string.
          */
         public static String help() {
-            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU}";
+            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU} (optional --device-id <int>)";
         }
     }
 }
