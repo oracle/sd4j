@@ -84,8 +84,8 @@ directly from other code.
 
 ### Using a CUDA GPU
 
-To use the GPU you need to modify the pom file to depend on `onnxruntime_gpu` and to add `<argument>true</argument>` to
-the `exec-maven-plugin` block.
+To use the GPU you need to modify the pom file to depend on `onnxruntime_gpu` and swap `<argument>CPU</argument>` for
+`<argument>CUDA</argument>` in the `exec-maven-plugin` block.
 
 ## Implementation details
 

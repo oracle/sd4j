@@ -61,6 +61,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Level;
@@ -82,11 +83,10 @@ public final class SD4JApp extends JFrame {
     /**
      * Creates a SD4JApp panel and pipeline.
      *
-     * @param modelPath The model path to load.
-     * @param useCUDA   Should the models use GPUs?
+     * @param config The SD4J configuration.
      */
-    public SD4JApp(String modelPath, boolean useCUDA) {
-        diff = SD4J.factory(modelPath, useCUDA);
+    public SD4JApp(SD4J.SD4JConfig config) {
+        diff = SD4J.factory(config);
 
         setTitle("SD4J");
 
@@ -316,7 +316,7 @@ public final class SD4JApp extends JFrame {
             constraints.gridy = 1;
             JButton btn = new JButton("Save");
             btn.addActionListener((ActionEvent e) -> {
-                int returnVal = chooser.showOpenDialog(this);
+                int returnVal = chooser.showSaveDialog(this);
                 if (returnVal == JFileChooser.APPROVE_OPTION) {
                     File file = chooser.getSelectedFile();
                     if (!file.getName().endsWith(".png")) {
@@ -416,14 +416,12 @@ public final class SD4JApp extends JFrame {
      */
     public static void main(String[] args) throws UnsupportedLookAndFeelException, ClassNotFoundException, InstantiationException, IllegalAccessException {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        if (args.length == 2) {
-            SD4JApp newGUI = new SD4JApp(args[0], Boolean.parseBoolean(args[1]));
-            newGUI.setVisible(true);
-        } else if (args.length == 1) {
-            SD4JApp newGUI = new SD4JApp(args[0], false);
-            newGUI.setVisible(true);
+        Optional<SD4J.SD4JConfig> config = SD4J.SD4JConfig.parseArgs(args);
+        if (config.isPresent()) {
+            SD4JApp gui = new SD4JApp(config.get());
+            gui.setVisible(true);
         } else {
-            System.out.println("SD4J Swing: <model-path> <optional, useCUDA>");
+            System.out.println(SD4J.SD4JConfig.help());
             System.exit(1);
         }
     }
