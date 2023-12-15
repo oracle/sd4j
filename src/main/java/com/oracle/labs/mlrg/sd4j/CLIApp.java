@@ -42,6 +42,7 @@ import ai.onnxruntime.OrtException;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 /**
@@ -62,9 +63,13 @@ public final class CLIApp {
      * @throws IOException If the image files could not be written out.
      */
     public static void main(String[] args) throws OrtException, IOException {
-        String modelPath = args[0];
-        boolean useCUDA = (args.length == 2) && (args[1].equalsIgnoreCase("cuda"));
-        SD4J sd = SD4J.factory(modelPath, useCUDA);
+        Optional<SD4J.SD4JConfig> config = SD4J.SD4JConfig.parseArgs(args);
+        if (config.isEmpty()) {
+            System.out.println(SD4J.SD4JConfig.help());
+            System.exit(1);
+        }
+
+        SD4J sd = SD4J.factory(config.get());
 
         String text = "Professional photo of a green tree surrounded by purple flowers and a sunset in a red sky";
 

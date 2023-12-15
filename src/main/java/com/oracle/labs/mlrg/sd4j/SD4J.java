@@ -51,6 +51,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -241,7 +243,6 @@ public final class SD4J implements AutoCloseable {
         return factory(initialPath, false);
     }
 
-
     /**
      * Constructs a SD4J pipeline from the supplied model path, optionally on GPUs.
      * <p>
@@ -258,22 +259,40 @@ public final class SD4J implements AutoCloseable {
      * @return The SD4J pipeline.
      */
     public static SD4J factory(String initialPath, boolean useCUDA) {
-        var vaePath = Path.of(initialPath, "/vae_decoder/model.onnx");
-        var encoderPath = Path.of(initialPath, "/text_encoder/model.onnx");
-        var unetPath = Path.of(initialPath, "/unet/model.onnx");
-        var safetyPath = Path.of(initialPath, "/safety_checker/model.onnx");
+        return factory(new SD4JConfig(initialPath, useCUDA ? ExecutionProvider.CUDA : ExecutionProvider.CPU, 0));
+    }
+
+    /**
+     * Constructs a SD4J pipeline from the supplied model path, optionally on GPUs.
+     * <p>
+     * Expects the following directory structure:
+     * <ul>
+     *     <li>VAE - $initialPath/vae_decoder/model.onnx</li>
+     *     <li>Text Encoder - $initialPath/text_encoder/model.onnx</li>
+     *     <li>UNet - $initialPath/unet/model.onnx</li>
+     *     <li>Safety checker - $initialPath/safety_checker/model.onnx</li>
+     *     <li>Tokenizer - $pwd/text_tokenizer/custom_op_cliptok.onnx</li>
+     * </ul>
+     * @param config The SD4J configuration.
+     * @return The SD4J pipeline.
+     */
+    public static SD4J factory(SD4JConfig config) {
+        var vaePath = Path.of(config.modelPath(), "/vae_decoder/model.onnx");
+        var encoderPath = Path.of(config.modelPath(), "/text_encoder/model.onnx");
+        var unetPath = Path.of(config.modelPath(), "/unet/model.onnx");
+        var safetyPath = Path.of(config.modelPath(), "/safety_checker/model.onnx");
         var tokenizerPath = Path.of("text_tokenizer/custom_op_cliptok.onnx");
 
         try {
             // Initialize the library
             OrtEnvironment env = OrtEnvironment.getEnvironment();
             env.setTelemetry(false);
-            Supplier<OrtSession.SessionOptions> optsSupplier;
-            if (useCUDA) {
-                optsSupplier = () -> {
+            final int deviceId = config.id();
+            Supplier<OrtSession.SessionOptions> optsSupplier = switch (config.provider) {
+                case CUDA -> () -> {
                     try {
                         var opts = new OrtSession.SessionOptions();
-                        var cudaOpts = new OrtCUDAProviderOptions(0);
+                        var cudaOpts = new OrtCUDAProviderOptions(deviceId);
                         cudaOpts.add("arena_extend_strategy","kSameAsRequested");
                         cudaOpts.add("cudnn_conv_algo_search","DEFAULT");
                         cudaOpts.add("do_copy_in_default_stream","1");
@@ -285,8 +304,29 @@ public final class SD4J implements AutoCloseable {
                         throw new IllegalStateException("Failed to create options.", e);
                     }
                 };
-            } else {
-                optsSupplier = () -> {
+                case CORE_ML -> () -> {
+                    try {
+                        var opts = new OrtSession.SessionOptions();
+                        opts.setInterOpNumThreads(0);
+                        opts.setIntraOpNumThreads(0);
+                        opts.addCoreML();
+                        return opts;
+                    } catch (OrtException e) {
+                        throw new IllegalStateException("Failed to construct session options", e);
+                    }
+                };
+                case DIRECT_ML -> () -> {
+                    try {
+                        var opts = new OrtSession.SessionOptions();
+                        opts.setInterOpNumThreads(0);
+                        opts.setIntraOpNumThreads(0);
+                        opts.addDirectML(deviceId);
+                        return opts;
+                    } catch (OrtException e) {
+                        throw new IllegalStateException("Failed to construct session options", e);
+                    }
+                };
+                case CPU -> () -> {
                     try {
                         var opts = new OrtSession.SessionOptions();
                         opts.setInterOpNumThreads(0);
@@ -296,7 +336,7 @@ public final class SD4J implements AutoCloseable {
                         throw new IllegalStateException("Failed to construct session options", e);
                     }
                 };
-            }
+            };
             TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get());
             logger.info("Loaded embedder from " + encoderPath);
             UNet unet = new UNet(unetPath, optsSupplier.get());
@@ -362,6 +402,117 @@ public final class SD4J implements AutoCloseable {
     public record Request(String text, String negText, int steps, float guidance, int seed, ImageSize size, Schedulers scheduler, int batchSize) {
         Request(String text, String negText, String stepsStr, String guidanceStr, String seedStr, ImageSize size, Schedulers scheduler, String batchSize) {
             this(text.strip(), negText.strip(), Integer.parseInt(stepsStr), Float.parseFloat(guidanceStr), Integer.parseInt(seedStr), size, scheduler, Integer.parseInt(batchSize));
+        }
+    }
+
+    /**
+     * Supported execution providers.
+     */
+    public enum ExecutionProvider {
+        /**
+         * CPU.
+         */
+        CPU,
+        /**
+         * Apple's Core ML.
+         */
+        CORE_ML,
+        /**
+         * Nvidia GPUs.
+         */
+        CUDA,
+        /**
+         * Windows DirectML devices.
+         */
+        DIRECT_ML;
+
+        /**
+         * Looks up an execution provider returning the enum or throwing {@link IllegalArgumentException} if it's unknown.
+         * @param name The ep to lookup.
+         * @return The enum value.
+         */
+        public static ExecutionProvider lookup(String name) {
+            String lower = name.toLowerCase(Locale.US);
+            return switch (lower) {
+                case "cpu", "" -> CPU;
+                case "coreml", "core_ml", "core-ml" -> CORE_ML;
+                case "cuda" -> CUDA;
+                case "directml", "direct_ml", "direct-ml" -> DIRECT_ML;
+                default -> { throw new IllegalArgumentException("Unknown execution provider '" + lower + "'"); }
+            };
+        }
+    }
+
+    /**
+     * Record for the SD4J configuration.
+     * @param modelPath The path to the onnx models.
+     * @param provider The execution provider to use.
+     * @param id The device id.
+     */
+    public record SD4JConfig(String modelPath, ExecutionProvider provider, int id) {
+        /**
+         * Parses the arguments into a config.
+         * @param args The arguments.
+         * @return A SD4J config.
+         */
+        public static Optional<SD4JConfig> parseArgs(String[] args) {
+            String modelPath = "";
+            String ep = "";
+            int id = 0;
+            for (int i = 0; i < args.length; i++) {
+                switch (args[i]) {
+                    case "--help", "--usage" -> {
+                        return Optional.empty();
+                    }
+                    case "--model-path" -> {
+                        // check if there's another argument, otherwise return empty
+                        if (i == args.length - 1) {
+                            // No model path
+                            return Optional.empty();
+                        } else {
+                            // Consume argument
+                            i++;
+                            modelPath = args[i];
+                        }
+                    }
+                    case "--execution-provider", "--ep" -> {
+                        // check if there's another argument, otherwise return empty
+                        if (i == args.length - 1) {
+                            // No provider
+                            return Optional.empty();
+                        } else {
+                            // Consume argument
+                            i++;
+                            ep = args[i];
+                        }
+                    }
+                    case "--device-id" -> {
+                        // check if there's another argument, otherwise return empty
+                        if (i == args.length - 1) {
+                            // No id
+                            return Optional.empty();
+                        } else {
+                            // Consume argument
+                            i++;
+                            id = Integer.parseInt(args[i]);
+                        }
+                    }
+                    default -> {
+                        // Unexpected argument
+                        logger.warning("Unexpected argument '" + args[i] + "'");
+                        return Optional.empty();
+                    }
+                }
+            }
+            return Optional.of(new SD4JConfig(modelPath, ExecutionProvider.lookup(ep), id));
+        }
+
+        /**
+         * Help string for the config arguments.
+         * @return The help string.
+         */
+        public static String help() {
+            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU} (optional --device-id <int>)";
         }
     }
 }

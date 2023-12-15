@@ -148,7 +148,10 @@
                         <argument>-cp</argument>
                         <classpath/>
                         <argument>com.oracle.labs.mlrg.sd4j.SD4JApp</argument>
+                        <argument>--model-path</argument>
                         <argument>${modelPath}</argument>
+                        <argument>--execution-provider</argument>
+                        <argument>CPU</argument>
                     </arguments>
                 </configuration>
             </plugin>
