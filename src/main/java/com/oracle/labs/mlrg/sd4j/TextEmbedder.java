@@ -110,7 +110,7 @@ public final class TextEmbedder implements AutoCloseable {
     public TextEmbedder(Path tokenizerPath, Path embedderPath, OrtSession.SessionOptions embedderOpts) throws OrtException {
         this.env = OrtEnvironment.getEnvironment();
         this.tokenizerOpts = new OrtSession.SessionOptions();
-        this.tokenizerOpts.registerCustomOpLibrary(System.mapLibraryName("ortextensions"));
+        this.tokenizerOpts.registerCustomOpLibrary("./"+System.mapLibraryName("ortextensions"));
         this.tokenizer = env.createSession(tokenizerPath.toString(), tokenizerOpts);
         this.textEmbedderOpts = embedderOpts;
         this.textEmbedder = env.createSession(embedderPath.toString(), textEmbedderOpts);
