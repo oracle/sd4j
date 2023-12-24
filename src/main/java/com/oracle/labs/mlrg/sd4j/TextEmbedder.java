@@ -42,6 +42,7 @@ import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
+import ai.onnxruntime.TensorInfo;
 
 import java.nio.IntBuffer;
 import java.nio.file.Path;
@@ -70,9 +71,13 @@ public final class TextEmbedder implements AutoCloseable {
      */
     public static final int BOS_TOKEN = 49406;
     /**
-     * Output dimensionality.
+     * Output dimensionality for Stable Diffusion v1.5 style models.
      */
-    public static final int DIM_SIZE = 768;
+    public static final int SD_1_5_DIM_SIZE = 768;
+    /**
+     * Output dimensionality for Stable Diffusion v2 style models.
+     */
+    public static final int SD_2_DIM_SIZE = 1024;
 
     /**
      * Pattern which matches linefeeds as they crash the tokenizer.
@@ -86,6 +91,8 @@ public final class TextEmbedder implements AutoCloseable {
 
     private final OrtSession.SessionOptions textEmbedderOpts;
     private final OrtSession textEmbedder;
+
+    private final int dimSize;
 
     /**
      * Constructs a TextEmbedder from the supplied model and tokenizer using the default session options.
@@ -114,6 +121,15 @@ public final class TextEmbedder implements AutoCloseable {
         this.tokenizer = env.createSession(tokenizerPath.toString(), tokenizerOpts);
         this.textEmbedderOpts = embedderOpts;
         this.textEmbedder = env.createSession(embedderPath.toString(), textEmbedderOpts);
+        this.dimSize = (int) ((TensorInfo) textEmbedder.getOutputInfo().get("pooler_output").getInfo()).getShape()[1];
+    }
+
+    /**
+     * Returns the dimension of the token embedding.
+     * @return The token embedding dimension.
+     */
+    public int getDimSize() {
+        return dimSize;
     }
 
     /**
@@ -176,15 +192,27 @@ public final class TextEmbedder implements AutoCloseable {
         try (OnnxTensor input = OnnxTensor.createTensor(env, tokenIds.buffer(), tokenIds.shape());
             OrtSession.Result output = textEmbedder.run(Map.of("input_ids", input))) {
             var fb = ((OnnxTensor) output.get(0)).getFloatBuffer();
-            return new FloatTensor(fb, new long[]{tokenIds.shape[0], MAX_LENGTH, DIM_SIZE});
+            return new FloatTensor(fb, new long[]{tokenIds.shape[0], MAX_LENGTH, dimSize});
         }
+    }
+
+    /**
+     * Generates an embedding of the text.
+     * @param text The text to embed.
+     * @param batchSize The batch size of images to generate.
+     * @return A tensor of size [batch_size, 77, dimSize].
+     * @throws OrtException If the model call failed.
+     */
+    public FloatTensor embedText(String text, int batchSize) throws OrtException {
+        IntBuffer ids = tokenizeText(text);
+        return embedText(batchSize, ids);
     }
 
     /**
      * Generates an embedding of both the text and the unconditional output (i.e. an empty sentence).
      * @param text The text to embed.
      * @param batchSize The batch size of images to generate.
-     * @return A tensor of size [batch_size*2, 77, 768].
+     * @return A tensor of size [batch_size*2, 77, dimSize].
      * @throws OrtException If the model call failed.
      */
     public FloatTensor embedTextAndUncond(String text, int batchSize) throws OrtException {
@@ -198,7 +226,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @param text The text to embed.
      * @param negative The negative text to embed.
      * @param batchSize The batch size of images to generate.
-     * @return A tensor of size [batch_size*2, 77, 768].
+     * @return A tensor of size [batch_size*2, 77, dimSize].
      * @throws OrtException If the model call failed.
      */
     public FloatTensor embedTextAndNegative(String text, String negative, int batchSize) throws OrtException {
@@ -211,8 +239,25 @@ public final class TextEmbedder implements AutoCloseable {
      * Embeds the supplied tokens.
      * @param batchSize The batch size of images to generate.
      * @param positiveTokens The positive tokens.
+     * @return A tensor of size [batch_size*2, 77, dimSize].
+     * @throws OrtException If the model call failed.
+     */
+    private FloatTensor embedText(int batchSize, IntBuffer positiveTokens) throws OrtException {
+        IntTensor idTensor = new IntTensor(new long[]{batchSize, MAX_LENGTH});
+        for (int i = 0; i < batchSize; i++) {
+            idTensor.buffer.put(positiveTokens);
+            positiveTokens.rewind();
+        }
+        idTensor.buffer.rewind();
+        return embedTokens(idTensor);
+    }
+
+    /**
+     * Embeds the supplied tokens.
+     * @param batchSize The batch size of images to generate.
+     * @param positiveTokens The positive tokens.
      * @param negativeTokens The negative tokens.
-     * @return A tensor of size [batch_size*2, 77, 768].
+     * @return A tensor of size [batch_size*2, 77, dimSize].
      * @throws OrtException If the model call failed.
      */
     private FloatTensor embedText(int batchSize, IntBuffer positiveTokens, IntBuffer negativeTokens) throws OrtException {

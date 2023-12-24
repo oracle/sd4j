@@ -15,8 +15,9 @@ version number as we depend on newer versions of ONNX Runtime.
 The project supports txt2img generation, it doesn't currently implement img2img, upscaling or inpainting.
 
 By default it uses a fp32 model, and running on a 6 core 2019 16" Intel Macbook Pro each diffusion step takes around 5s. 
-Running on better hardware, enabling the CoreML EP, or with a CUDA GPU will greatly reduce the time taken to generate an
-image. 
+Running on better hardware, or with a CUDA GPU will greatly reduce the time taken to generate an image, as will using an
+SD-Turbo model. There is experimental support for the CoreML (for macOS) and DirectML (for Windows) backends, but proper 
+utilisation of these may require model changes like quantization which is not yet implemented.
 
 ## Example images
 
@@ -37,6 +38,15 @@ Text: "Professional photograph of the Apollo 11 lunar lander in a field, high qu
 ![Generated image from the prompt "Professional photograph of George Washington in his garden grilling steaks, detailed face, high quality, 4k"](images/washington-steak.png "Professional photograph of George Washington in his garden grilling steaks, detailed face, high quality, 4k")
 
 Text: "Professional photograph of George Washington in his garden grilling steaks, detailed face, high quality, 4k", Negative Text: "painting, drawing, art", Seed: 42, Guidance Scale: 10, Inference Steps: 60, Scheduler: Euler Ancestral, Image Size: 512x512.
+
+## Model support
+
+The SD4J project supports both SD v1.5 and SD v2 style models, the difference is detected automatically on loading.
+It also supports [SD-Turbo](https://huggingface.co/stabilityai/sd-turbo), a SD v2 model, which can generate acceptable
+images with as few as two diffusion inference steps (it should work with a single step, but performance is poor in the
+current implementation possibly due to differences in how the scheduler implementations behave). SD-Turbo models do not
+support negative prompts or classifier-free guidance, so to use such a model set the guidance scale to a value less than
+1.0 (which disables it).
 
 ## Installation
 

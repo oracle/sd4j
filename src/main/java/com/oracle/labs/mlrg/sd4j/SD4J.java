@@ -155,8 +155,11 @@ public final class SD4J implements AutoCloseable {
     public List<SDImage> generateImage(int numInferenceSteps, String text, String negativeText, float guidanceScale, int batchSize, ImageSize size, int seed, Schedulers scheduler, Consumer<Integer> progressCallback) {
         try {
             FloatTensor textEmbedding;
-            if (negativeText.isBlank()) {
-                logger.info("Generating image for '" + text + "'");
+            if (guidanceScale < 1.0) {
+                logger.info("Generating image for '" + text + "', without guidance");
+                textEmbedding = embedder.embedText(text, batchSize);
+            } else if (negativeText.isBlank()) {
+                logger.info("Generating image for '" + text + "', with guidance");
                 textEmbedding = embedder.embedTextAndUncond(text, batchSize);
             } else {
                 logger.info("Generating image for '" + text + "', with negative text '" + negativeText + "'");
