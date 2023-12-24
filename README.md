@@ -31,10 +31,6 @@ Text: "Wildlife photograph of an astronaut riding a horse in the desert", Negati
 
 Text: "Press photo of an America's Cup catamaran sailing through the sands of Mars, high resolution, high quality", Negative Text: "water, sea, ocean, lake", Seed: 42, Guidance Scale: 10, Inference Steps: 40, Scheduler: Euler Ancestral, Image Size: 512x512.
 
-![Generated image from the prompt "Press photo of an America's Cup catamaran sailing through the sands of Mars, high resolution, high quality, uhd, professional photograph"](images/boat-mars-turbo.png "Press photo of an America's Cup catamaran sailing through the sands of Mars, high resolution, high quality, uhd, professional photograph")
-
-Text: "Press photo of an America's Cup catamaran sailing through the sands of Mars, high resolution, high quality, uhd, professional photograph", Seed: 42, Guidance Scale: 0.0, Inference Steps: 5, Scheduler: Euler Ancestral, Image Size: 512x512, Model: SD-Turbo.
-
 ![Generated image from the prompt "Professional photograph of the Apollo 11 lunar lander in a field, high quality, 4k"](images/lunar-lander.png "Professional photograph of the Apollo 11 lunar lander in a field, high quality, 4k")
 
 Text: "Professional photograph of the Apollo 11 lunar lander in a field, high quality, 4k", Negative Text: "", Seed: 42, Guidance Scale: 10, Inference Steps: 50, Scheduler: Euler Ancestral, Image Size: 512x512.
