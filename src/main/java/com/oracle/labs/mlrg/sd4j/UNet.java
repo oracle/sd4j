@@ -67,6 +67,7 @@ public final class UNet implements AutoCloseable {
 
     /**
      * Creates a UNet model with the default session options.
+     *
      * @param unetPath The path to the model ONNX file.
      * @throws OrtException If the model could not be loaded.
      */
@@ -76,8 +77,9 @@ public final class UNet implements AutoCloseable {
 
     /**
      * Creates a UNet model with the supplied session options.
+     *
      * @param unetPath The path to the model ONNX file.
-     * @param opts The ONNX Runtime session options.
+     * @param opts     The ONNX Runtime session options.
      * @throws OrtException If the model could not be loaded.
      */
     public UNet(Path unetPath, OrtSession.SessionOptions opts) throws OrtException {
@@ -96,22 +98,23 @@ public final class UNet implements AutoCloseable {
 
     /**
      * Packages the inputs into the supplied map suitable for inference in ONNX Runtime.
-     * @param map The input map, will be cleared.
+     *
+     * @param map                 The input map, will be cleared.
      * @param encoderHiddenStates The encoder hidden states (i.e. the text input).
-     * @param sample The current image sample.
-     * @param timestep The timestep number.
+     * @param sample              The current image sample.
+     * @param timestep            The timestep number.
      * @throws OrtException If the OnnxTensor construction failed.
      */
     private void createUnetModelInput(Map<String, OnnxTensor> map, FloatTensor encoderHiddenStates, FloatTensor sample, long timestep) throws OrtException {
         map.clear();
 
-        map.put("encoder_hidden_states", OnnxTensor.createTensor(env, encoderHiddenStates.buffer, encoderHiddenStates.shape));
-        map.put("sample", OnnxTensor.createTensor(env, sample.buffer, sample.shape));
+        map.put("encoder_hidden_states", encoderHiddenStates.wrapForORT(env));
+        map.put("sample", sample.wrapForORT(env));
         OnnxTensor timestepTensor = switch (this.timestepType) {
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, new int[] {(int)timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, new long[] {timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT -> OnnxTensor.createTensor(env, new float[] {timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, new double[] {timestep});
+            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, new int[]{(int) timestep});
+            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, new long[]{timestep});
+            case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT -> OnnxTensor.createTensor(env, new float[]{timestep});
+            case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, new double[]{timestep});
             default -> throw new IllegalStateException("Invalid tensor type for timestep tensor.");
         };
         map.put("timestep", timestepTensor);
@@ -119,10 +122,11 @@ public final class UNet implements AutoCloseable {
 
     /**
      * Samples an initial latent space tensor by sampling from a zero mean gaussian with the supplied noise level.
-     * @param batchSize The number of images to create.
-     * @param height The image height.
-     * @param width The image width.
-     * @param seed The RNG seed.
+     *
+     * @param batchSize          The number of images to create.
+     * @param height             The image height.
+     * @param width              The image width.
+     * @param seed               The RNG seed.
      * @param initialNoiseStdDev The std dev of the gaussian noise.
      * @return A latent space sample.
      */
@@ -131,7 +135,7 @@ public final class UNet implements AutoCloseable {
         var channels = 4;
         var latents = new FloatTensor(new long[]{batchSize, channels, height / 8, width / 8});
 
-        for(int i = 0; i < latents.buffer.capacity(); i++) {
+        for (int i = 0; i < latents.buffer.capacity(); i++) {
             double stdNormal = rng.nextGaussian(0, initialNoiseStdDev);
             latents.buffer.put(i, (float) stdNormal);
         }
@@ -143,7 +147,8 @@ public final class UNet implements AutoCloseable {
      * Applies the classifier-free guidance by subtracting the transformed predicted noise.
      * <p>
      * Mutates the {@code noisePred} input.
-     * @param noisePred The noise prediction for the negative or unconditional image.
+     *
+     * @param noisePred     The noise prediction for the negative or unconditional image.
      * @param noisePredText The noise prediction for the positive text.
      * @param guidanceScale The guidance strength.
      */
@@ -152,21 +157,22 @@ public final class UNet implements AutoCloseable {
             float curNoise = noisePred.buffer.get(i);
             float curNoiseText = noisePredText.buffer.get(i);
             float update = curNoise + (guidanceScale * (curNoiseText - curNoise));
-            noisePred.buffer.put(i,update);
+            noisePred.buffer.put(i, update);
         }
     }
 
     /**
      * Runs UNet inverse diffusion for the specified number of steps.
+     *
      * @param numInferenceSteps The number of inference steps.
-     * @param textEmbeddings The text embedding vectors.
-     * @param guidanceScale The strength of the classifier-free guidance.
-     * @param batchSize The number of generated images.
-     * @param height The image height.
-     * @param width The image width.
-     * @param seed The RNG seed.
-     * @param callback The callback function, called with the step count after each step.
-     * @param schedulerEnum The scheduler to use.
+     * @param textEmbeddings    The text embedding vectors.
+     * @param guidanceScale     The strength of the classifier-free guidance.
+     * @param batchSize         The number of generated images.
+     * @param height            The image height.
+     * @param width             The image width.
+     * @param seed              The RNG seed.
+     * @param callback          The callback function, called with the step count after each step.
+     * @param schedulerEnum     The scheduler to use.
      * @return A batch of images in latent space.
      * @throws OrtException If the inference call failed in ONNX Runtime.
      */
@@ -178,48 +184,63 @@ public final class UNet implements AutoCloseable {
         // create latent tensor
         var latents = sampleLatent(batchSize, height, width, seed, scheduler.getInitialNoiseSigma());
 
-        var input = new HashMap<String, OnnxTensor>();
-        try {
-            for (int t = 0; t < timesteps.length; t++) {
-                logger.info("Running inference step " + t);
-                // torch.cat([latents] * 2)
-                var latentModelInput = new FloatTensor(new long[] { 2L*batchSize, 4L, height / 8, width / 8 });
-                latents.buffer().rewind();
+        boolean doClassifierFreeGuidance = guidanceScale >= 1.0;
+        logger.info("Classifier free guidance = " + doClassifierFreeGuidance);
+
+        var input = new HashMap<String, OnnxTensor>(4);
+        for (int t = 0; t < timesteps.length; t++) {
+            logger.info("Running inference step " + t);
+            latents.buffer().rewind();
+            FloatTensor latentModelInput;
+            if (doClassifierFreeGuidance) {
+                // torch.cat([latents] * 2) when using guidance
+                latentModelInput = new FloatTensor(new long[]{2L * batchSize, 4L, height / 8, width / 8});
                 latentModelInput.buffer.put(latents.buffer());
                 latents.buffer().rewind();
-                latentModelInput.buffer.put(latents.buffer());
-                latents.buffer().rewind();
-                latentModelInput.buffer.rewind();
+            } else {
+                latentModelInput = new FloatTensor(new long[]{batchSize, 4L, height / 8, width / 8});
+            }
+            latentModelInput.buffer.put(latents.buffer());
+            latents.buffer().rewind();
+            latentModelInput.buffer.rewind();
 
-                scheduler.scaleInPlace(latentModelInput, timesteps[t]);
+            scheduler.scaleInPlace(latentModelInput, timesteps[t]);
 
+            try {
                 createUnetModelInput(input, textEmbeddings, latentModelInput, timesteps[t]);
 
                 // Run Inference
                 try (var output = unet.run(input)) {
                     var outputTensor = (OnnxTensor) output.get(0);
 
-                    // Split tensors from 2,4,64,64 to 1,4,64,64
                     var fb = outputTensor.getFloatBuffer();
-                    if (!Arrays.equals(new long[]{2L*batchSize,4,height/8,width/8}, outputTensor.getInfo().getShape())) {
-                        throw new IllegalStateException("Expected output shape " + Arrays.toString(new long[]{2L*batchSize,4,height/8,width/8}) + ", found " + Arrays.toString(outputTensor.getInfo().getShape()));
+                    if (!Arrays.equals(latentModelInput.shape, outputTensor.getInfo().getShape())) {
+                        throw new IllegalStateException("Expected output shape " + Arrays.toString(latentModelInput.shape) + ", found " + Arrays.toString(outputTensor.getInfo().getShape()));
                     }
-                    var ft = new FloatTensor(fb, outputTensor.getInfo().getShape());
-                    var splitTensors = ft.split(new long[]{batchSize,4,height/8,width/8});
-                    var noisePred = splitTensors.get(0);
-                    var noisePredText = splitTensors.get(1);
+                    FloatTensor noisePred;
+                    if (doClassifierFreeGuidance) {
+                        // Split tensors from 2,4,64,64 to 1,4,64,64
+                        var ft = new FloatTensor(fb, outputTensor.getInfo().getShape());
+                        var splitTensors = ft.split(new long[]{batchSize, 4, height / 8, width / 8});
+                        noisePred = splitTensors.get(0);
+                        var noisePredText = splitTensors.get(1);
 
-                    // Perform guidance
-                    performGuidance(noisePred, noisePredText, guidanceScale);
+                        // Perform guidance
+                        performGuidance(noisePred, noisePredText, guidanceScale);
+                    } else {
+                        // If no guidance then wrap in FloatTensor
+                        noisePred = new FloatTensor(fb, outputTensor.getInfo().getShape());
+                    }
 
-                    // LMS Scheduler Step
+                    // Scheduler Step
                     latents = scheduler.step(noisePred, timesteps[t], latents);
                 }
 
-                callback.accept(t+1);
+                callback.accept(t + 1);
+            } finally {
+                OnnxValue.close(input);
+                input.clear();
             }
-        } finally {
-            OnnxValue.close(input);
         }
 
         return latents;
