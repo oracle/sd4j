@@ -41,12 +41,10 @@ Text: "Professional photograph of George Washington in his garden grilling steak
 
 ## Model support
 
-The SD4J project supports both SD v1.5 and SD v2 style models, the difference is detected automatically on loading.
-It also supports [SD-Turbo](https://huggingface.co/stabilityai/sd-turbo), a SD v2 model, which can generate acceptable
-images with as few as two diffusion inference steps (it should work with a single step, but performance is poor in the
-current implementation possibly due to differences in how the scheduler implementations behave). SD-Turbo models do not
-support negative prompts or classifier-free guidance, so to use such a model set the guidance scale to a value less than
-1.0 (which disables it).
+The SD4J project supports both SD v1.5 and SD v2 style models, the difference is detected automatically on loading. For
+models which do not support classifier-free guidance or negative prompts, such as SD-Turbo, the guidance scale should 
+be set to a value less than 1.0 which disables that guidance. Models like SD-Turbo can generate acceptable images in as
+few as two diffusion steps.
 
 ## Installation
 
