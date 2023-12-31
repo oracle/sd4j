@@ -98,11 +98,11 @@ public final class TextEmbedder implements AutoCloseable {
      * Constructs a TextEmbedder from the supplied model and tokenizer using the default session options.
      * @param tokenizerPath The path to the tokenizer model.
      * @param embedderPath The path to the text embedding model, usually a CLIP variant.
+     * @param defaultSize The default size of the text embedding if it cannot be extracted from the model file.
      * @throws OrtException If the model could not be loaded.
      */
-    public TextEmbedder(Path tokenizerPath, Path embedderPath) throws OrtException {
-        this(tokenizerPath, embedderPath, new OrtSession.SessionOptions());
-
+    public TextEmbedder(Path tokenizerPath, Path embedderPath, int defaultSize) throws OrtException {
+        this(tokenizerPath, embedderPath, new OrtSession.SessionOptions(), defaultSize);
     }
 
     /**
@@ -112,16 +112,22 @@ public final class TextEmbedder implements AutoCloseable {
      * @param tokenizerPath The path to the tokenizer model.
      * @param embedderPath The path to the text embedding model, usually a CLIP variant.
      * @param embedderOpts The session options for the text embedding model.
+     * @param defaultSize The default size of the text embedding if it cannot be extracted from the model file.
      * @throws OrtException If the model could not be loaded.
      */
-    public TextEmbedder(Path tokenizerPath, Path embedderPath, OrtSession.SessionOptions embedderOpts) throws OrtException {
+    public TextEmbedder(Path tokenizerPath, Path embedderPath, OrtSession.SessionOptions embedderOpts, int defaultSize) throws OrtException {
         this.env = OrtEnvironment.getEnvironment();
         this.tokenizerOpts = new OrtSession.SessionOptions();
         this.tokenizerOpts.registerCustomOpLibrary("./"+System.mapLibraryName("ortextensions"));
         this.tokenizer = env.createSession(tokenizerPath.toString(), tokenizerOpts);
         this.textEmbedderOpts = embedderOpts;
         this.textEmbedder = env.createSession(embedderPath.toString(), textEmbedderOpts);
-        this.dimSize = (int) ((TensorInfo) textEmbedder.getOutputInfo().get("pooler_output").getInfo()).getShape()[1];
+        int tmpSize = (int) ((TensorInfo) textEmbedder.getOutputInfo().get("last_hidden_state").getInfo()).getShape()[2];
+        if (tmpSize == -1) {
+            this.dimSize = defaultSize;
+        } else {
+            this.dimSize = tmpSize;
+        }
     }
 
     /**
