@@ -262,7 +262,7 @@ public final class SD4J implements AutoCloseable {
      * @return The SD4J pipeline.
      */
     public static SD4J factory(String initialPath, boolean useCUDA) {
-        return factory(new SD4JConfig(initialPath, useCUDA ? ExecutionProvider.CUDA : ExecutionProvider.CPU, 0));
+        return factory(new SD4JConfig(initialPath, useCUDA ? ExecutionProvider.CUDA : ExecutionProvider.CPU, 0, ModelType.SD1_5));
     }
 
     /**
@@ -340,7 +340,7 @@ public final class SD4J implements AutoCloseable {
                     }
                 };
             };
-            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get());
+            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize);
             logger.info("Loaded embedder from " + encoderPath);
             UNet unet = new UNet(unetPath, optsSupplier.get());
             logger.info("Loaded unet from " + unetPath);
@@ -441,7 +441,38 @@ public final class SD4J implements AutoCloseable {
                 case "coreml", "core_ml", "core-ml" -> CORE_ML;
                 case "cuda" -> CUDA;
                 case "directml", "direct_ml", "direct-ml" -> DIRECT_ML;
-                default -> { throw new IllegalArgumentException("Unknown execution provider '" + lower + "'"); }
+                default -> { throw new IllegalArgumentException("Unknown execution provider '" + name + "'"); }
+            };
+        }
+    }
+
+    /**
+     * The type of Stable Diffusion model.
+     */
+    public enum ModelType {
+        SD1_5(TextEmbedder.SD_1_5_DIM_SIZE),
+        SD2(TextEmbedder.SD_2_DIM_SIZE);
+
+        /**
+         * The text dimension size.
+         */
+        public final int textDimSize;
+
+        private ModelType(int textDimSize) {
+            this.textDimSize = textDimSize;
+        }
+
+        /**
+         * Looks up the model type returning the enum or throwing {@link IllegalArgumentException} if it's unknown.
+         * @param name The model type to lookup.
+         * @return The enum value.
+         */
+        public static ModelType lookup(String name) {
+            String lower = name.toLowerCase(Locale.US);
+            return switch (lower) {
+                case "sdv1.5", "sd15", "sd1.5", "sd1_5", "sd1", "sdv1" -> SD1_5;
+                case "sdv2", "sdv21", "sdv2.1", "sd-turbo", "sd_turbo" -> SD2;
+                default -> { throw new IllegalArgumentException("Unknown model type '" + name + "'"); }
             };
         }
     }
@@ -452,7 +483,7 @@ public final class SD4J implements AutoCloseable {
      * @param provider The execution provider to use.
      * @param id The device id.
      */
-    public record SD4JConfig(String modelPath, ExecutionProvider provider, int id) {
+    public record SD4JConfig(String modelPath, ExecutionProvider provider, int id, ModelType type) {
         /**
          * Parses the arguments into a config.
          * @param args The arguments.
@@ -461,13 +492,14 @@ public final class SD4J implements AutoCloseable {
         public static Optional<SD4JConfig> parseArgs(String[] args) {
             String modelPath = "";
             String ep = "";
+            String modelType = "sd1.5";
             int id = 0;
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
                     case "--help", "--usage" -> {
                         return Optional.empty();
                     }
-                    case "--model-path" -> {
+                    case "--model-path", "-p" -> {
                         // check if there's another argument, otherwise return empty
                         if (i == args.length - 1) {
                             // No model path
@@ -500,6 +532,17 @@ public final class SD4J implements AutoCloseable {
                             id = Integer.parseInt(args[i]);
                         }
                     }
+                    case "--model-type", "-m" -> {
+                        // check if there's another argument, otherwise return empty
+                        if (i == args.length - 1) {
+                            // No provider
+                            return Optional.empty();
+                        } else {
+                            // Consume argument
+                            i++;
+                            modelType = args[i];
+                        }
+                    }
                     default -> {
                         // Unexpected argument
                         logger.warning("Unexpected argument '" + args[i] + "'");
@@ -507,7 +550,7 @@ public final class SD4J implements AutoCloseable {
                     }
                 }
             }
-            return Optional.of(new SD4JConfig(modelPath, ExecutionProvider.lookup(ep), id));
+            return Optional.of(new SD4JConfig(modelPath, ExecutionProvider.lookup(ep), id, ModelType.lookup(modelType)));
         }
 
         /**
@@ -515,7 +558,7 @@ public final class SD4J implements AutoCloseable {
          * @return The help string.
          */
         public static String help() {
-            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU} (optional --device-id <int>)";
+            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU} (optional --device-id <int> --model-type <sd1.5 or sd2>)";
         }
     }
 }

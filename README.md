@@ -44,7 +44,9 @@ Text: "Professional photograph of George Washington in his garden grilling steak
 The SD4J project supports both SD v1.5 and SD v2 style models, the difference is detected automatically on loading. For
 models which do not support classifier-free guidance or negative prompts, such as SD-Turbo, the guidance scale should 
 be set to a value less than 1.0 which disables that guidance. Models like SD-Turbo can generate acceptable images in as
-few as two diffusion steps.
+few as two diffusion steps. Usually the model type is autodetected, but depending on how the model is exported to 
+ONNX format this detection can fail causing the image generation process to crash. In such cases supplying the 
+`--model-type {SD1.5, SD2}` argument with the appropriate parameter will fix the model type.
 
 ## Installation
 
