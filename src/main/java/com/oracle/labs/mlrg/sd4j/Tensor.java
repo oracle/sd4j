@@ -43,6 +43,7 @@ import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 
 import java.nio.Buffer;
+import java.util.Arrays;
 
 /**
  * Base class for tensors wrapped around {@link java.nio.Buffer} instances.
@@ -52,7 +53,7 @@ import java.nio.Buffer;
  * mutation. Remember to rewind it whenever you operate on the buffer using the implicit position methods.
  * @param <B> The buffer type.
  */
-public sealed abstract class Tensor<B extends Buffer> permits FloatTensor, IntTensor {
+public sealed abstract class Tensor<B extends Buffer> permits FloatTensor, IntTensor, LongTensor {
 
     /**
      * The buffer holding the values.
@@ -79,13 +80,13 @@ public sealed abstract class Tensor<B extends Buffer> permits FloatTensor, IntTe
      */
     public Tensor(B buffer, long[] shape) {
         this.buffer = buffer;
-        this.shape = shape;
-        this.strides = new long[shape.length];
+        this.shape = Arrays.copyOf(shape, shape.length);
+        this.strides = new long[this.shape.length];
         this.strides[strides.length-1] = 1;
         for (int i = strides.length-1; i > 0; i--) {
-            this.strides[i-1] = strides[i] * shape[i];
+            this.strides[i-1] = strides[i] * this.shape[i];
         }
-        this.numElements = computeNumElements(shape);
+        this.numElements = computeNumElements(this.shape);
         if (this.buffer.capacity() != this.numElements) {
             throw new IllegalArgumentException("Buffer has different capacity than the shape expects. Buffer.capacity = " + this.buffer.capacity() + ", numElements = " + this.numElements);
         }

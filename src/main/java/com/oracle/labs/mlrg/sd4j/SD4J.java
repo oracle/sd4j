@@ -64,6 +64,7 @@ public final class SD4J implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(SD4J.class.getName());
 
     private final TextEmbedder embedder;
+    private final TextEmbedder embedderXL;
     private final UNet unet;
     private final VAEDecoder vae;
     private final SafetyChecker safety;
@@ -76,7 +77,22 @@ public final class SD4J implements AutoCloseable {
      * @param safety The safety checker model which checks that the generated image is SFW.
      */
     public SD4J(TextEmbedder embedder, UNet unet, VAEDecoder vae, SafetyChecker safety) {
+        this(embedder, null, unet, vae, safety);
+    }
+
+    /**
+     * Constructs a stable diffusion xl pipeline from the supplied models.
+     *
+     * <p>Set {@code embedderXL} to null to get a standard stable diffusion pipeline.
+     * @param embedder The text embedding model. Usually a CLIP variant.
+     * @param embedderXL The second text embedding model. Usually a CLIP variant.
+     * @param unet The UNet model which performs the inverse diffusion.
+     * @param vae The VAE model which translates from latent space to pixel space.
+     * @param safety The safety checker model which checks that the generated image is SFW.
+     */
+    public SD4J(TextEmbedder embedder, TextEmbedder embedderXL, UNet unet, VAEDecoder vae, SafetyChecker safety) {
         this.embedder = embedder;
+        this.embedderXL = embedderXL;
         this.unet = unet;
         this.vae = vae;
         this.safety = safety;
@@ -154,19 +170,40 @@ public final class SD4J implements AutoCloseable {
      */
     public List<SDImage> generateImage(int numInferenceSteps, String text, String negativeText, float guidanceScale, int batchSize, ImageSize size, int seed, Schedulers scheduler, Consumer<Integer> progressCallback) {
         try {
-            FloatTensor textEmbedding;
+            TextEmbedder.EmbeddingOutput firstEmbedding;
+            TextEmbedder.EmbeddingOutput secondEmbedding = null;
             if (guidanceScale < 1.0) {
                 logger.info("Generating image for '" + text + "', without guidance");
-                textEmbedding = embedder.embedText(text, batchSize);
+                firstEmbedding = embedder.embedText(text, batchSize);
+                if (embedderXL != null) {
+                    secondEmbedding = embedderXL.embedText(text, batchSize);
+                }
             } else if (negativeText.isBlank()) {
                 logger.info("Generating image for '" + text + "', with guidance");
-                textEmbedding = embedder.embedTextAndUncond(text, batchSize);
+                firstEmbedding = embedder.embedTextAndUncond(text, batchSize);
+                if (embedderXL != null) {
+                    secondEmbedding = embedderXL.embedTextAndUncond(text, batchSize);
+                }
             } else {
                 logger.info("Generating image for '" + text + "', with negative text '" + negativeText + "'");
-                textEmbedding = embedder.embedTextAndNegative(text, negativeText, batchSize);
+                firstEmbedding = embedder.embedTextAndNegative(text, negativeText, batchSize);
+                if (embedderXL != null) {
+                    secondEmbedding = embedderXL.embedTextAndNegative(text, negativeText, batchSize);
+                }
+            }
+            FloatTensor textEmbedding;
+            FloatTensor pooledEmbedding;
+            if (embedderXL != null) {
+                // SDXL
+                textEmbedding = FloatTensor.concat(firstEmbedding.tokenEmbedding(), secondEmbedding.tokenEmbedding());
+                pooledEmbedding = secondEmbedding.pooledEmbedding();
+            } else {
+                // SD
+                textEmbedding = firstEmbedding.tokenEmbedding();
+                pooledEmbedding = null;
             }
             logger.info("Generated embedding");
-            FloatTensor latents = unet.inference(numInferenceSteps, textEmbedding, guidanceScale, batchSize, size.height(), size.width(), seed, progressCallback, scheduler);
+            FloatTensor latents = unet.inference(numInferenceSteps, textEmbedding, pooledEmbedding, guidanceScale, batchSize, size.height(), size.width(), seed, progressCallback, scheduler);
             logger.info("Generated latents");
             boolean[] isValid = new boolean[batchSize];
             Arrays.fill(isValid, true);
@@ -272,6 +309,7 @@ public final class SD4J implements AutoCloseable {
      * <ul>
      *     <li>VAE - $initialPath/vae_decoder/model.onnx</li>
      *     <li>Text Encoder - $initialPath/text_encoder/model.onnx</li>
+     *     <li>Text Encoder XL - $initialPath/text_encoder_2/model.onnx</li>
      *     <li>UNet - $initialPath/unet/model.onnx</li>
      *     <li>Safety checker - $initialPath/safety_checker/model.onnx</li>
      *     <li>Tokenizer - $pwd/text_tokenizer/custom_op_cliptok.onnx</li>
@@ -282,6 +320,7 @@ public final class SD4J implements AutoCloseable {
     public static SD4J factory(SD4JConfig config) {
         var vaePath = Path.of(config.modelPath(), "/vae_decoder/model.onnx");
         var encoderPath = Path.of(config.modelPath(), "/text_encoder/model.onnx");
+        var encoderXLPath = Path.of(config.modelPath(), "/text_encoder_2/model.onnx");
         var unetPath = Path.of(config.modelPath(), "/unet/model.onnx");
         var safetyPath = Path.of(config.modelPath(), "/safety_checker/model.onnx");
         var tokenizerPath = Path.of("text_tokenizer/custom_op_cliptok.onnx");
@@ -340,8 +379,12 @@ public final class SD4J implements AutoCloseable {
                     }
                 };
             };
-            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize);
+            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize, false);
             logger.info("Loaded embedder from " + encoderPath);
+            TextEmbedder embedderXL = null;
+            if (config.type == ModelType.SDXL) {
+                embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, optsSupplier.get(), config.type.text2DimSize, true);
+            }
             UNet unet = new UNet(unetPath, optsSupplier.get());
             logger.info("Loaded unet from " + unetPath);
             VAEDecoder vae = new VAEDecoder(vaePath, optsSupplier.get());
@@ -354,7 +397,7 @@ public final class SD4J implements AutoCloseable {
                 safety = null;
                 logger.info("No safety found");
             }
-            return new SD4J(embedder, unet, vae, safety);
+            return new SD4J(embedder, embedderXL, unet, vae, safety);
         } catch (OrtException e) {
             throw new IllegalStateException("Failed to instantiate SD4J pipeline", e);
         }
@@ -450,16 +493,22 @@ public final class SD4J implements AutoCloseable {
      * The type of Stable Diffusion model.
      */
     public enum ModelType {
-        SD1_5(TextEmbedder.SD_1_5_DIM_SIZE),
-        SD2(TextEmbedder.SD_2_DIM_SIZE);
+        SD1_5(TextEmbedder.SD_1_5_DIM_SIZE,-1),
+        SD2(TextEmbedder.SD_2_DIM_SIZE,-1),
+        SDXL(TextEmbedder.SD_1_5_DIM_SIZE,TextEmbedder.SDXL_DIM_SIZE);
 
         /**
-         * The text dimension size.
+         * The text dimension size for the first encoder.
          */
         public final int textDimSize;
+        /**
+         * The text dimension size for the second encoder.
+         */
+        public final int text2DimSize;
 
-        private ModelType(int textDimSize) {
+        private ModelType(int textDimSize, int text2DimSize) {
             this.textDimSize = textDimSize;
+            this.text2DimSize = text2DimSize;
         }
 
         /**
@@ -472,6 +521,7 @@ public final class SD4J implements AutoCloseable {
             return switch (lower) {
                 case "sdv1.5", "sd15", "sd1.5", "sd1_5", "sd1", "sdv1" -> SD1_5;
                 case "sdv2", "sdv21", "sdv2.1", "sd-turbo", "sd_turbo" -> SD2;
+                case "sdxl", "sdxl-turbo", "sdxl_turbo" -> SDXL;
                 default -> { throw new IllegalArgumentException("Unknown model type '" + name + "'"); }
             };
         }
