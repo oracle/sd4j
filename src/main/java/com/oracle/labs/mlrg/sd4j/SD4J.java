@@ -193,14 +193,17 @@ public final class SD4J implements AutoCloseable {
             }
             FloatTensor textEmbedding;
             FloatTensor pooledEmbedding;
+            float latentScalar;
             if (embedderXL != null) {
                 // SDXL
                 textEmbedding = FloatTensor.concat(firstEmbedding.tokenEmbedding(), secondEmbedding.tokenEmbedding());
                 pooledEmbedding = secondEmbedding.pooledEmbedding();
+                latentScalar = VAEDecoder.SDXL_LATENT_SCALAR;
             } else {
                 // SD
                 textEmbedding = firstEmbedding.tokenEmbedding();
                 pooledEmbedding = null;
+                latentScalar = VAEDecoder.SD_LATENT_SCALAR;
             }
             logger.info("Generated embedding");
             FloatTensor latents = unet.inference(numInferenceSteps, textEmbedding, pooledEmbedding, guidanceScale, batchSize, size.height(), size.width(), seed, progressCallback, scheduler);
@@ -209,7 +212,7 @@ public final class SD4J implements AutoCloseable {
             Arrays.fill(isValid, true);
             List<BufferedImage> image;
             if (safety != null) {
-                FloatTensor decoded = vae.decoder(latents);
+                FloatTensor decoded = vae.decoder(latents, latentScalar);
                 List<SafetyChecker.CheckerOutput> checks = safety.check(decoded);
                 List<BufferedImage> tmp = VAEDecoder.convertToBufferedImage(decoded);
                 image = new ArrayList<>();
@@ -221,7 +224,7 @@ public final class SD4J implements AutoCloseable {
                     }
                 }
             } else {
-                image = vae.decodeToBufferedImage(latents);
+                image = vae.decodeToBufferedImage(latents, latentScalar);
             }
             logger.info("Generated images");
             return wrap(image, numInferenceSteps, text, negativeText, guidanceScale, seed, isValid);
