@@ -175,10 +175,13 @@ public final class SD4JApp extends JFrame {
                 new SD4J.ImageSize(512),
                 new SD4J.ImageSize(768, 512),
                 new SD4J.ImageSize(512, 768),
-                new SD4J.ImageSize(768)
+                new SD4J.ImageSize(768),
+                new SD4J.ImageSize(1024, 768),
+                new SD4J.ImageSize(768, 1024),
+                new SD4J.ImageSize(1024)
         };
         JComboBox<SD4J.ImageSize> size = new JComboBox<>(options);
-        size.setSelectedItem(new SD4J.ImageSize(512));
+        size.setSelectedItem(options[3]);
         constraints.gridx = 1;
         constraints.gridy = 5;
         size.setBorder(border5px.get());

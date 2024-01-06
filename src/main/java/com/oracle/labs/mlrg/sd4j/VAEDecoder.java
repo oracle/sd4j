@@ -58,9 +58,14 @@ public final class VAEDecoder implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(VAEDecoder.class.getName());
 
     /**
-     * Scaling coefficient for transforming from latent to pixel space.
+     * Scaling coefficient for transforming SD models from latent to pixel space.
      */
-    public static final float LATENT_SCALAR = 1.0f / 0.18215f;
+    public static final float SD_LATENT_SCALAR = 1.0f / 0.18215f;
+
+    /**
+     * Scaling coefficient for transforming SDXL models from latent to pixel space.
+     */
+    public static final float SDXL_LATENT_SCALAR = 1.0f / 0.13025f;
 
     private final OrtEnvironment env;
 
@@ -91,12 +96,13 @@ public final class VAEDecoder implements AutoCloseable {
     /**
      * Decodes the latents into the image. Mutates the input latents
      * @param latents The latent image variables.
+     * @param scalar The scaling factor applied to the latents before decoding.
      * @return The image stored as a float tensor.
      * @throws OrtException If the model failed.
      */
-    public FloatTensor decoder(FloatTensor latents) throws OrtException {
+    public FloatTensor decoder(FloatTensor latents, float scalar) throws OrtException {
         logger.info("Decoding latents");
-        latents.scale(LATENT_SCALAR);
+        latents.scale(scalar);
         try (var inputTensor = OnnxTensor.createTensor(env, latents.buffer, latents.shape);
             var result = vae.run(Map.of("latent_sample", inputTensor))) {
             var outputTensor = (OnnxTensor) result.get(0);
@@ -139,11 +145,12 @@ public final class VAEDecoder implements AutoCloseable {
     /**
      * Decodes a latent space tensor into a batch of images.
      * @param latents The latent space tensor [batch_size, 4, height/8, width/8].
+     * @param scalar The scaling factor applied to the latents before decoding.
      * @return A list of generated images.
      * @throws OrtException If the decode operation failed.
      */
-    public List<BufferedImage> decodeToBufferedImage(FloatTensor latents) throws OrtException {
-        var floatImage = decoder(latents);
+    public List<BufferedImage> decodeToBufferedImage(FloatTensor latents, float scalar) throws OrtException {
+        var floatImage = decoder(latents, scalar);
         return convertToBufferedImage(floatImage);
     }
 

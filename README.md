@@ -41,12 +41,12 @@ Text: "Professional photograph of George Washington in his garden grilling steak
 
 ## Model support
 
-The SD4J project supports both SD v1.5 and SD v2 style models, the difference is detected automatically on loading. For
-models which do not support classifier-free guidance or negative prompts, such as SD-Turbo, the guidance scale should 
-be set to a value less than 1.0 which disables that guidance. Models like SD-Turbo can generate acceptable images in as
-few as two diffusion steps. Usually the model type is autodetected, but depending on how the model is exported to 
-ONNX format this detection can fail causing the image generation process to crash. In such cases supplying the 
-`--model-type {SD1.5, SD2}` argument with the appropriate parameter will fix the model type.
+The SD4J project supports SD v1.5, SD v2 and SDXL style models. For models which do not support classifier-free guidance
+or negative prompts, such as SD-Turbo or SDXL-Turbo, the guidance scale should be set to a value less than 1.0 which
+disables that guidance. Models like SD-Turbo can generate acceptable images in as few as two diffusion steps. The 
+difference between SDv1 and SDv2 models is autodetected, but SDXL must be supplied as the model type for SDXL models
+otherwise it will throw an exception on generation. In some cases the autodetection of v1 and v2 may fail in which case
+supplying the `--model-type {SD1.5, SD2, SDXL}` argument with the appropriate parameter will fix the model type.
 
 ## Installation
 
@@ -64,7 +64,7 @@ git lfs install
 git clone https://huggingface.co/runwayml/stable-diffusion-v1-5 -b onnx
 ```
 The Stable Diffusion v1.5 checkpoint is available under the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
-For other models there is a one or two stage process to generate the ONNX format models. If the model is already in 
+For other SD models there is a one or two stage process to generate the ONNX format models. If the model is already in 
 Hugging Face Diffusers format then you can run the `convert_stable_diffusion_checkpoint_to_onnx.py` file from the 
 [diffusers](https://github.com/huggingface/diffusers) project as follows:
 ```bash
@@ -74,7 +74,13 @@ If the model is an original stable diffusion checkpoint then you first need to r
 ```bash
 python scripts/convert_original_stable_diffusion_to_diffusers.py --checkpoint_path <path-on-disk-to-checkpoint> --scheduler_type lms --dump_path <path-on-disk-to-diffusers-output>
 ```
-Both scripts require a suitable Python 3 virtual environment with diffusers and onnx installed.
+If the model is an SDXL model then it needs to be exported from the Hugging Face Hub 
+using [optimum](https://github.com/huggingface/optimum):
+```bash
+optimum-cli export onnx --model <model-hub-name> <path-to-onnx-model-folder>
+```
+The scripts require a suitable Python 3 virtual environment with `diffusers`, `onnxruntime`, `optimum` and `onnx` 
+installed.
 
 ### Setup ORT extensions
 You will also need to check out and compile onnxruntime-extensions for your platform. The repo is [https://github.com/microsoft/onnxruntime-extensions](https://github.com/microsoft/onnxruntime-extensions),
