@@ -248,7 +248,7 @@ public final class UNet implements AutoCloseable {
                 // guidance means we duplicate this vector
                 // technically there are negative embeddings for those things which can change generation behaviour
                 // but given we're fixing them anyway let's not bother about that
-                additionalImageConditions = new FloatTensor(new long[]{batchSize, 12L});
+                additionalImageConditions = new FloatTensor(new long[]{2L*batchSize, 6L});
                 for (int i = 0; i < batchSize; i++) {
                     additionalImageConditions.buffer.put(conditionsArr);
                     additionalImageConditions.buffer.put(conditionsArr);
