@@ -46,23 +46,33 @@ public enum Schedulers {
     /**
      * A Linear Multi-Step scheduler.
      */
-    LMS(a -> new LMSDiscreteScheduler(), "LMS"),
+    LMS(a -> new LMSDiscreteScheduler(), "LMS", "LMS"),
     /**
      * An Euler Ancestral scheduler.
      */
-    EULER_ANCESTRAL(EulerAncestralDiscreteScheduler::new, "Euler Ancestral");
+    EULER_ANCESTRAL(EulerAncestralDiscreteScheduler::new, "Euler Ancestral", "Euler a");
 
     final Function<Long, Scheduler> factory;
     final String displayName;
+    final String descriptionName;
 
-    Schedulers(Function<Long,Scheduler> factory, String displayName) {
+    Schedulers(Function<Long,Scheduler> factory, String displayName, String descriptionName) {
         this.factory = factory;
         this.displayName = displayName;
+        this.descriptionName = descriptionName;
     }
 
     @Override
     public String toString() {
         return displayName;
+    }
+
+    /**
+     * The name to be used in the image metadata.
+     * @return The image metadata scheduler name.
+     */
+    public String descriptionName() {
+        return descriptionName;
     }
 
     /**

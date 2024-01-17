@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates.
  *
  * The Universal Permissive License (UPL), Version 1.0
  *
@@ -77,13 +77,13 @@ public final class CLIApp {
         List<SD4J.SDImage> images = sd.generateImage(30, text, "", 7.5f, 1, new SD4J.ImageSize(512, 512), seed);
         String output = "output-"+seed+".png";
         logger.info("Saving to " + output);
-        SD4J.save(images.get(0).image(), output);
+        SD4J.save(images.get(0), output);
 
         String negativeText = "red tree, green sky";
         images = sd.generateImage(30, text, negativeText, 7.5f, 1, new SD4J.ImageSize(512, 512), seed);
         output = "output-neg-"+seed+".png";
         logger.info("Saving to " + output);
-        SD4J.save(images.get(0).image(), output);
+        SD4J.save(images.get(0), output);
 
         sd.close();
     }

@@ -91,7 +91,7 @@ and it can be compiled with `./build_lib.sh --config Release --update --build --
 
 The GUI can be executed with `mvn package exec:exec -DmodelPath=<path-to-stable-diffusion-model>`. It constructs a
 window where you can specify the parameters of the image you'd like to generate, and each image creates its own window
-where it can save the image as a png file.
+where it can save the image as a png file. Saved png files contain a metadata field with the generation parameters.
 
 ### Use in other programs
 

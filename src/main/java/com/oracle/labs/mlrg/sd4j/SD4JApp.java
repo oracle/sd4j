@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates.
  *
  * The Universal Permissive License (UPL), Version 1.0
  *
@@ -327,7 +327,7 @@ public final class SD4JApp extends JFrame {
                     }
                     logger.info("Saving file to " + file.getName());
                     try {
-                        SD4J.save(image.image(), file);
+                        SD4J.save(image, file);
                     } catch (IOException ex) {
                         logger.log(Level.WARNING, "Failed to save file", ex);
                     }
