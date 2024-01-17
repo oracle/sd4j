@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023 Oracle and/or its affiliates.
+ * Copyright (c) 2023, 2024, Oracle and/or its affiliates.
  *
  * The Universal Permissive License (UPL), Version 1.0
  *
@@ -43,13 +43,20 @@ import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
 import ai.onnxruntime.providers.OrtCUDAProviderOptions;
 
+import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
+import javax.imageio.ImageTypeSpecifier;
+import javax.imageio.ImageWriter;
+import javax.imageio.metadata.IIOMetadata;
+import javax.imageio.metadata.IIOMetadataNode;
+import javax.imageio.stream.FileImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -63,6 +70,7 @@ import java.util.logging.Logger;
 public final class SD4J implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(SD4J.class.getName());
 
+    private final String modelName;
     private final TextEmbedder embedder;
     private final TextEmbedder embedderXL;
     private final UNet unet;
@@ -71,26 +79,30 @@ public final class SD4J implements AutoCloseable {
 
     /**
      * Constructs a stable diffusion pipeline from the supplied models.
+     * @param modelName The model name.
      * @param embedder The text embedding model. Usually a CLIP variant.
      * @param unet The UNet model which performs the inverse diffusion.
      * @param vae The VAE model which translates from latent space to pixel space.
      * @param safety The safety checker model which checks that the generated image is SFW.
      */
-    public SD4J(TextEmbedder embedder, UNet unet, VAEDecoder vae, SafetyChecker safety) {
-        this(embedder, null, unet, vae, safety);
+    public SD4J(String modelName, TextEmbedder embedder, UNet unet, VAEDecoder vae, SafetyChecker safety) {
+        this(modelName, embedder, null, unet, vae, safety);
     }
 
     /**
      * Constructs a stable diffusion xl pipeline from the supplied models.
      *
      * <p>Set {@code embedderXL} to null to get a standard stable diffusion pipeline.
+     *
+     * @param modelName The model name.
      * @param embedder The text embedding model. Usually a CLIP variant.
      * @param embedderXL The second text embedding model. Usually a CLIP variant.
      * @param unet The UNet model which performs the inverse diffusion.
      * @param vae The VAE model which translates from latent space to pixel space.
      * @param safety The safety checker model which checks that the generated image is SFW.
      */
-    public SD4J(TextEmbedder embedder, TextEmbedder embedderXL, UNet unet, VAEDecoder vae, SafetyChecker safety) {
+    public SD4J(String modelName, TextEmbedder embedder, TextEmbedder embedderXL, UNet unet, VAEDecoder vae, SafetyChecker safety) {
+        this.modelName = modelName;
         this.embedder = embedder;
         this.embedderXL = embedderXL;
         this.unet = unet;
@@ -104,7 +116,7 @@ public final class SD4J implements AutoCloseable {
      * @param filename The filename to save to.
      * @throws IOException If the file save failed.
      */
-    public static void save(BufferedImage image, String filename) throws IOException {
+    public static void save(SDImage image, String filename) throws IOException {
         File f = new File(filename);
         save(image, f);
     }
@@ -115,8 +127,36 @@ public final class SD4J implements AutoCloseable {
      * @param file The file to save to.
      * @throws IOException If the file save failed.
      */
-    public static void save(BufferedImage image, File file) throws IOException {
-        ImageIO.write(image, "png", file);
+    public static void save(SDImage image, File file) throws IOException {
+        var imType = ImageTypeSpecifier.createFromRenderedImage(image.image());
+        Iterator<ImageWriter> writers = ImageIO.getImageWriters(imType, "png");
+
+        if (writers.hasNext()) {
+            var writer = writers.next();
+            try (var ios = new FileImageOutputStream(file)) {
+                var metadata = writer.getDefaultImageMetadata(imType, writer.getDefaultWriteParam());
+                writeMetadata(image, metadata);
+                var ioimage = new IIOImage(image.image(), List.of(), metadata);
+                writer.setOutput(ios);
+                writer.write(ioimage);
+            }
+        } else {
+            throw new IllegalStateException("No writer for 'png' found.");
+        }
+    }
+
+    private static void writeMetadata(SDImage image, IIOMetadata blankMetadata) throws IOException {
+        IIOMetadataNode textEntry = new IIOMetadataNode("tEXtEntry");
+        textEntry.setAttribute("keyword", "parameters");
+        textEntry.setAttribute("value", image.metadataDescription());
+
+        IIOMetadataNode text = new IIOMetadataNode("tEXt");
+        text.appendChild(textEntry);
+
+        IIOMetadataNode root = new IIOMetadataNode(blankMetadata.getNativeMetadataFormatName());
+        root.appendChild(text);
+
+        blankMetadata.mergeTree(blankMetadata.getNativeMetadataFormatName(), root);
     }
 
     /**
@@ -146,16 +186,6 @@ public final class SD4J implements AutoCloseable {
     }
 
     /**
-     * Generates a batch of images from the supplied generation request.
-     * @param request The image generation request.
-     * @param progressCallback A supplier which can be used to update a GUI. It is called after each diffusion step with the current step count.
-     * @return A list of generated images.
-     */
-    public List<SDImage> generateImage(Request request, Consumer<Integer> progressCallback) {
-        return generateImage(request.steps(), request.text(), request.negText(), request.guidance(), request.batchSize(), request.size(), request.seed(), request.scheduler(), progressCallback);
-    }
-
-    /**
      * Generates a batch of images from the supplied prompts and parameters.
      * @param numInferenceSteps The number of diffusion inference steps to take (commonly 20-50 for LMS and Euler Ancestral).
      * @param text The text prompt.
@@ -169,26 +199,37 @@ public final class SD4J implements AutoCloseable {
      * @return A list of generated images.
      */
     public List<SDImage> generateImage(int numInferenceSteps, String text, String negativeText, float guidanceScale, int batchSize, ImageSize size, int seed, Schedulers scheduler, Consumer<Integer> progressCallback) {
+        var request = new Request(text, negativeText, numInferenceSteps, guidanceScale, seed, size, scheduler, batchSize);
+        return generateImage(request, progressCallback);
+    }
+
+    /**
+     * Generates a batch of images from the supplied generation request.
+     * @param request The image generation request.
+     * @param progressCallback A supplier which can be used to update a GUI. It is called after each diffusion step with the current step count.
+     * @return A list of generated images.
+     */
+    public List<SDImage> generateImage(Request request, Consumer<Integer> progressCallback) {
         try {
             TextEmbedder.EmbeddingOutput firstEmbedding;
             TextEmbedder.EmbeddingOutput secondEmbedding = null;
-            if (guidanceScale < 1.0) {
-                logger.info("Generating image for '" + text + "', without guidance");
-                firstEmbedding = embedder.embedText(text, batchSize);
+            if (request.guidance() < 1.0) {
+                logger.info("Generating image for '" + request.text() + "', without guidance");
+                firstEmbedding = embedder.embedText(request.text(), request.batchSize());
                 if (embedderXL != null) {
-                    secondEmbedding = embedderXL.embedText(text, batchSize);
+                    secondEmbedding = embedderXL.embedText(request.text(), request.batchSize());
                 }
-            } else if (negativeText.isBlank()) {
-                logger.info("Generating image for '" + text + "', with guidance");
-                firstEmbedding = embedder.embedTextAndUncond(text, batchSize);
+            } else if (request.negText().isBlank()) {
+                logger.info("Generating image for '" + request.text() + "', with guidance");
+                firstEmbedding = embedder.embedTextAndUncond(request.text(), request.batchSize());
                 if (embedderXL != null) {
-                    secondEmbedding = embedderXL.embedTextAndUncond(text, batchSize);
+                    secondEmbedding = embedderXL.embedTextAndUncond(request.text(), request.batchSize());
                 }
             } else {
-                logger.info("Generating image for '" + text + "', with negative text '" + negativeText + "'");
-                firstEmbedding = embedder.embedTextAndNegative(text, negativeText, batchSize);
+                logger.info("Generating image for '" + request.text() + "', with negative text '" + request.negText() + "'");
+                firstEmbedding = embedder.embedTextAndNegative(request.text(), request.negText(), request.batchSize());
                 if (embedderXL != null) {
-                    secondEmbedding = embedderXL.embedTextAndNegative(text, negativeText, batchSize);
+                    secondEmbedding = embedderXL.embedTextAndNegative(request.text(), request.negText(), request.batchSize());
                 }
             }
             FloatTensor textEmbedding;
@@ -206,9 +247,11 @@ public final class SD4J implements AutoCloseable {
                 latentScalar = VAEDecoder.SD_LATENT_SCALAR;
             }
             logger.info("Generated embedding");
-            FloatTensor latents = unet.inference(numInferenceSteps, textEmbedding, pooledEmbedding, guidanceScale, batchSize, size.height(), size.width(), seed, progressCallback, scheduler);
+            FloatTensor latents = unet.inference(request.steps(), textEmbedding, pooledEmbedding,
+                    request.guidance(), request.batchSize(), request.size().height(), request.size().width(),
+                    request.seed(), progressCallback, request.scheduler());
             logger.info("Generated latents");
-            boolean[] isValid = new boolean[batchSize];
+            boolean[] isValid = new boolean[request.batchSize()];
             Arrays.fill(isValid, true);
             List<BufferedImage> image;
             if (safety != null) {
@@ -227,7 +270,7 @@ public final class SD4J implements AutoCloseable {
                 image = vae.decodeToBufferedImage(latents, latentScalar);
             }
             logger.info("Generated images");
-            return wrap(image, numInferenceSteps, text, negativeText, guidanceScale, seed, isValid);
+            return wrap(image, request, isValid);
         } catch (OrtException e) {
             throw new IllegalStateException("Model inference failed.", e);
         }
@@ -236,19 +279,15 @@ public final class SD4J implements AutoCloseable {
     /**
      * Wraps the output from the image generation in an {@link SDImage} record.
      * @param images The generated images.
-     * @param numInferenceSteps The number of inference steps.
-     * @param text The text.
-     * @param negText The negative text.
-     * @param guidanceScale The classifier-free guidance scale.
-     * @param seed The RNG seed.
+     * @param request The generation request.
      * @param isValid Is this a valid image?
      * @return A list of SDImages.
      */
-    private static List<SDImage> wrap(List<BufferedImage> images, int numInferenceSteps, String text, String negText, float guidanceScale, int seed, boolean[] isValid) {
+    private List<SDImage> wrap(List<BufferedImage> images, Request request, boolean[] isValid) {
         List<SDImage> output = new ArrayList<>();
 
         for (int i = 0; i < images.size(); i++) {
-            output.add(new SDImage(images.get(i), text, negText, numInferenceSteps, guidanceScale, seed, i, isValid[i]));
+            output.add(new SDImage(images.get(i), modelName, request, i, isValid[i]));
         }
 
         return output;
@@ -321,11 +360,13 @@ public final class SD4J implements AutoCloseable {
      * @return The SD4J pipeline.
      */
     public static SD4J factory(SD4JConfig config) {
-        var vaePath = Path.of(config.modelPath(), "/vae_decoder/model.onnx");
-        var encoderPath = Path.of(config.modelPath(), "/text_encoder/model.onnx");
-        var encoderXLPath = Path.of(config.modelPath(), "/text_encoder_2/model.onnx");
-        var unetPath = Path.of(config.modelPath(), "/unet/model.onnx");
-        var safetyPath = Path.of(config.modelPath(), "/safety_checker/model.onnx");
+        var rootPath = Path.of(config.modelPath());
+        var modelName = rootPath.getName(rootPath.getNameCount()-1).toString();
+        var vaePath = rootPath.resolve("vae_decoder/model.onnx");
+        var encoderPath = rootPath.resolve("text_encoder/model.onnx");
+        var encoderXLPath = rootPath.resolve("text_encoder_2/model.onnx");
+        var unetPath = rootPath.resolve("unet/model.onnx");
+        var safetyPath = rootPath.resolve("safety_checker/model.onnx");
         var tokenizerPath = Path.of("text_tokenizer/custom_op_cliptok.onnx");
 
         try {
@@ -387,6 +428,7 @@ public final class SD4J implements AutoCloseable {
             TextEmbedder embedderXL = null;
             if (config.type == ModelType.SDXL) {
                 embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, optsSupplier.get(), config.type.text2DimSize, true);
+                logger.info("Loaded second embedder from " + encoderXLPath);
             }
             UNet unet = new UNet(unetPath, optsSupplier.get());
             logger.info("Loaded unet from " + unetPath);
@@ -400,7 +442,7 @@ public final class SD4J implements AutoCloseable {
                 safety = null;
                 logger.info("No safety found");
             }
-            return new SD4J(embedder, embedderXL, unet, vae, safety);
+            return new SD4J(modelName, embedder, embedderXL, unet, vae, safety);
         } catch (OrtException e) {
             throw new IllegalStateException("Failed to instantiate SD4J pipeline", e);
         }
@@ -409,13 +451,47 @@ public final class SD4J implements AutoCloseable {
     /**
      * An image generated from Stable Diffusion, along with the input text and other inference properties.
      * @param image The image.
-     * @param text The text used to control generation.
-     * @param numInferenceSteps The number of diffusion inference steps.
-     * @param guidanceScale The strength of the guidance.
-     * @param seed The RNG seed.
+     * @param modelName The model name.
+     * @param request The image generation request.
      * @param batchId The id number within the batch.
+     * @param isValid Did the image pass the safety check?
      */
-    public record SDImage(BufferedImage image, String text, String negText, int numInferenceSteps, float guidanceScale, int seed, int batchId, boolean isValid) {}
+    public record SDImage(BufferedImage image, String modelName, Request request, int batchId, boolean isValid) {
+        public String metadataDescription() {
+            StringBuilder sb = new StringBuilder();
+
+            sb.append(request.text());
+            sb.append('\n');
+            if (!request.negText().isEmpty()) {
+                sb.append("Negative prompt: ");
+                sb.append(request.negText());
+                sb.append('\n');
+            }
+            sb.append("Steps: ");
+            sb.append(request.steps());
+            sb.append(", ");
+            sb.append("Sampler: ");
+            sb.append(request.scheduler().descriptionName());
+            sb.append(", ");
+            sb.append("CFG scale: ");
+            sb.append(request.guidance());
+            sb.append(", ");
+            sb.append("Seed: ");
+            sb.append(request.seed());
+            sb.append(", ");
+            sb.append("Size: ");
+            sb.append(request.size().width());
+            sb.append("x");
+            sb.append(request.size().height());
+            sb.append(", ");
+            sb.append("Model: ");
+            sb.append(modelName);
+            sb.append(", ");
+            sb.append("Batch id: ");
+            sb.append(batchId);
+            return sb.toString();
+        }
+    }
 
     /**
      * Image size.
