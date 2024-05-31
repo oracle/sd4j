@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2023 Oracle and/or its affiliates.
+  ~ Copyright (c) 2023, 2024 Oracle and/or its affiliates.
   ~
   ~ The Universal Permissive License (UPL), Version 1.0
   ~
@@ -43,7 +43,7 @@
 
     <groupId>com.oracle.labs.mlrg</groupId>
     <artifactId>sd4j</artifactId>
-    <version>1.1-1.14.0</version>
+    <version>1.2-1.18.0</version>
 
     <name>sd4j</name>
     <url>https://labs.oracle.com</url>
@@ -53,7 +53,8 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
-        <onnxruntime.version>1.14.0</onnxruntime.version>
+        <onnxruntime.version>1.18.0</onnxruntime.version>
+        <onnxruntime.extensions.version>0.11.0</onnxruntime.extensions.version>
         <modelPath></modelPath>
     </properties>
 
@@ -75,6 +76,11 @@
             <version>${onnxruntime.version}</version>
         </dependency>
         -->
+        <dependency>
+            <groupId>com.microsoft.onnxruntime</groupId>
+            <artifactId>onnxruntime-extensions</artifactId>
+            <version>${onnxruntime.extensions.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

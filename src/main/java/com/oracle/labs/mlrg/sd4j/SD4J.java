@@ -41,6 +41,7 @@ package com.oracle.labs.mlrg.sd4j;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
+import ai.onnxruntime.providers.CoreMLFlags;
 import ai.onnxruntime.providers.OrtCUDAProviderOptions;
 
 import javax.imageio.IIOImage;
@@ -56,6 +57,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
@@ -374,6 +376,16 @@ public final class SD4J implements AutoCloseable {
             OrtEnvironment env = OrtEnvironment.getEnvironment();
             env.setTelemetry(false);
             final int deviceId = config.id();
+            Supplier<OrtSession.SessionOptions> cpuSupplier = () -> {
+                try {
+                    var opts = new OrtSession.SessionOptions();
+                    opts.setInterOpNumThreads(0);
+                    opts.setIntraOpNumThreads(0);
+                    return opts;
+                } catch (OrtException e) {
+                    throw new IllegalStateException("Failed to construct session options", e);
+                }
+            };
             Supplier<OrtSession.SessionOptions> optsSupplier = switch (config.provider) {
                 case CUDA -> () -> {
                     try {
@@ -395,7 +407,7 @@ public final class SD4J implements AutoCloseable {
                         var opts = new OrtSession.SessionOptions();
                         opts.setInterOpNumThreads(0);
                         opts.setIntraOpNumThreads(0);
-                        opts.addCoreML();
+                        opts.addCoreML(EnumSet.of(CoreMLFlags.CREATE_MLPROGRAM));
                         return opts;
                     } catch (OrtException e) {
                         throw new IllegalStateException("Failed to construct session options", e);
@@ -412,22 +424,14 @@ public final class SD4J implements AutoCloseable {
                         throw new IllegalStateException("Failed to construct session options", e);
                     }
                 };
-                case CPU -> () -> {
-                    try {
-                        var opts = new OrtSession.SessionOptions();
-                        opts.setInterOpNumThreads(0);
-                        opts.setIntraOpNumThreads(0);
-                        return opts;
-                    } catch (OrtException e) {
-                        throw new IllegalStateException("Failed to construct session options", e);
-                    }
-                };
+                case CPU -> cpuSupplier;
             };
-            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize, false);
+            // Always run the embedders & safety checker on CPU to save accelerator memory.
+            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, cpuSupplier.get(), config.type.textDimSize, false);
             logger.info("Loaded embedder from " + encoderPath);
             TextEmbedder embedderXL = null;
             if (config.type == ModelType.SDXL) {
-                embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, optsSupplier.get(), config.type.text2DimSize, true);
+                embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, cpuSupplier.get(), config.type.text2DimSize, true);
                 logger.info("Loaded second embedder from " + encoderXLPath);
             }
             UNet unet = new UNet(unetPath, optsSupplier.get());
@@ -436,7 +440,7 @@ public final class SD4J implements AutoCloseable {
             logger.info("Loaded vae from " + vaePath);
             SafetyChecker safety;
             if (safetyPath.toFile().exists()) {
-                safety = new SafetyChecker(safetyPath, optsSupplier.get());
+                safety = new SafetyChecker(safetyPath, cpuSupplier.get());
                 logger.info("Created safety");
             } else {
                 safety = null;

@@ -8,7 +8,7 @@ We will keep it current with the latest releases of ONNX Runtime, with appropria
 related ONNX Runtime features become available through the ONNX Runtime Java API. All the code is subject to change as
 this is a code sample, any APIs in it should not be considered stable.
 
-This repo targets ONNX Runtime 1.14. The version number is in two parts `<sd4j-version>-<onnxruntime-version>`, and the
+This repo targets ONNX Runtime 1.18. The version number is in two parts `<sd4j-version>-<onnxruntime-version>`, and the
 initial release of sd4j is v1.0-1.14.0. We'll bump the sd4j version number if it gains new features and the ONNX Runtime
 version number as we depend on newer versions of ONNX Runtime.
 
@@ -16,8 +16,9 @@ The project supports txt2img generation, it doesn't currently implement img2img,
 
 By default it uses a fp32 model, and running on a 6 core 2019 16" Intel Macbook Pro each diffusion step takes around 5s. 
 Running on better hardware, or with a CUDA GPU will greatly reduce the time taken to generate an image, as will using an
-SD-Turbo model. There is experimental support for the CoreML (for macOS) and DirectML (for Windows) backends, but proper 
-utilisation of these may require model changes like quantization which is not yet implemented.
+SD-Turbo model. There is experimental support for the CoreML (for macOS) and DirectML (for Windows) backends, but at the
+moment CoreML does not accelerate computation due to a lack of support for all the UNet operations in ONNX Runtime's 
+CoreML backend.
 
 ## Example images
 
@@ -50,9 +51,9 @@ supplying the `--model-type {SD1.5, SD2, SDXL}` argument with the appropriate pa
 
 ## Installation
 
-This project requires [Apache Maven](https://maven.apache.org), [Java 17 or newer](https://www.oracle.com/java/technologies/downloads/),
-a compiled ONNX Runtime extensions binary, and a Stable Diffusion model checkpoint.
-The other dependencies (ONNX Runtime and Apache Commons Math) are downloaded by Maven automatically.
+This project requires [Apache Maven](https://maven.apache.org), [Java 17 or newer](https://www.oracle.com/java/technologies/downloads/), and a Stable Diffusion model checkpoint.
+The other dependencies (ONNX Runtime, ONNX Runtime extensions and Apache Commons Math) are downloaded by Maven 
+automatically.
 
 ### Prepare model checkpoint
 
@@ -81,11 +82,6 @@ optimum-cli export onnx --model <model-hub-name> <path-to-onnx-model-folder>
 ```
 The scripts require a suitable Python 3 virtual environment with `diffusers`, `onnxruntime`, `optimum` and `onnx` 
 installed.
-
-### Setup ORT extensions
-You will also need to check out and compile onnxruntime-extensions for your platform. The repo is [https://github.com/microsoft/onnxruntime-extensions](https://github.com/microsoft/onnxruntime-extensions),
-and it can be compiled with `./build_lib.sh --config Release --update --build --parallel` which generates the required library (`libortextensions.[dylib,so]` or `ortextensions.dll`) in the
-`build/<OS-name>/Release/lib/` folder. That library should be copied into the root of this directory.
 
 ## Running the GUI
 
