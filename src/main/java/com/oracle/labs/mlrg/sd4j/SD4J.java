@@ -42,8 +42,8 @@ import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtProvider;
 import ai.onnxruntime.OrtSession;
-import ai.onnxruntime.providers.OrtCUDAProviderOptions;
 import ai.onnxruntime.providers.CoreMLFlags;
+import ai.onnxruntime.providers.OrtCUDAProviderOptions;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -488,11 +488,12 @@ public final class SD4J implements AutoCloseable {
                 };
                 case CPU -> cpuSupplier;
             };
-            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize, false);
+            // Always run the embedders & safety checker on CPU to save accelerator memory.
+            TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, cpuSupplier.get(), config.type.textDimSize, false);
             logger.info("Loaded embedder from " + encoderPath);
             TextEmbedder embedderXL = null;
             if (config.type == ModelType.SDXL) {
-                embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, optsSupplier.get(), config.type.text2DimSize, true);
+                embedderXL = new TextEmbedder(tokenizerPath, encoderXLPath, cpuSupplier.get(), config.type.text2DimSize, true);
                 logger.info("Loaded second embedder from " + encoderXLPath);
             }
             UNet unet = new UNet(unetPath, optsSupplier.get());
@@ -501,7 +502,7 @@ public final class SD4J implements AutoCloseable {
             logger.info("Loaded vae from " + vaePath);
             SafetyChecker safety;
             if (safetyPath.toFile().exists()) {
-                safety = new SafetyChecker(safetyPath, optsSupplier.get());
+                safety = new SafetyChecker(safetyPath, cpuSupplier.get());
                 logger.info("Created safety");
             } else {
                 safety = null;
