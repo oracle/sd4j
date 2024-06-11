@@ -50,6 +50,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.SplittableRandom;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -205,7 +206,7 @@ public final class UNet implements AutoCloseable {
      * @throws OrtException If the inference call failed in ONNX Runtime.
      */
     public FloatTensor inference(int numInferenceSteps, FloatTensor textEmbeddings, float guidanceScale, int batchSize, int height, int width, int seed, Consumer<Integer> callback, Schedulers schedulerEnum) throws OrtException {
-        return inference(numInferenceSteps, textEmbeddings, null, guidanceScale, batchSize, height, width, seed, callback, schedulerEnum);
+        return inference(numInferenceSteps, textEmbeddings, null, guidanceScale, batchSize, height, width, seed, callback, schedulerEnum, (a,i) -> {});
     }
 
     /**
@@ -227,7 +228,8 @@ public final class UNet implements AutoCloseable {
      * @return A batch of images in latent space.
      * @throws OrtException If the inference call failed in ONNX Runtime.
      */
-    public FloatTensor inference(int numInferenceSteps, FloatTensor textEmbeddings, FloatTensor pooledTextEmbeddings, float guidanceScale, int batchSize, int height, int width, int seed, Consumer<Integer> callback, Schedulers schedulerEnum) throws OrtException {
+    public FloatTensor inference(int numInferenceSteps, FloatTensor textEmbeddings, FloatTensor pooledTextEmbeddings, float guidanceScale, int batchSize, int height, int width, int seed, Consumer<Integer> callback, Schedulers schedulerEnum,
+            BiConsumer<FloatTensor, Integer> saveCallback) throws OrtException {
         var rng = new SplittableRandom(seed);
         var scheduler = schedulerEnum.create(rng.nextLong());
         var timesteps = scheduler.setTimesteps(numInferenceSteps);
@@ -323,6 +325,7 @@ public final class UNet implements AutoCloseable {
                 }
 
                 callback.accept(t + 1);
+                saveCallback.accept(latents, t);
             } finally {
                 OnnxValue.close(input);
                 input.clear();

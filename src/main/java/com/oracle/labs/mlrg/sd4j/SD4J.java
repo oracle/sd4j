@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023, 2024, Oracle and/or its affiliates.
+ * Copyright (c) 2023, 2025, Oracle and/or its affiliates.
  *
  * The Universal Permissive License (UPL), Version 1.0
  *
@@ -43,6 +43,7 @@ import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtProvider;
 import ai.onnxruntime.OrtSession;
 import ai.onnxruntime.providers.OrtCUDAProviderOptions;
+import ai.onnxruntime.providers.CoreMLFlags;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -57,10 +58,12 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.logging.Logger;
@@ -120,6 +123,16 @@ public final class SD4J implements AutoCloseable {
     public static void save(SDImage image, String filename) throws IOException {
         File f = new File(filename);
         save(image, f);
+    }
+
+    /**
+     * Saves the buffered image to the supplied path as a png.
+     * @param image The image.
+     * @param filename The path to save to.
+     * @throws IOException If the file save failed.
+     */
+    public static void save(SDImage image, Path filename) throws IOException {
+        save(image, filename.toFile());
     }
 
     /**
@@ -200,7 +213,26 @@ public final class SD4J implements AutoCloseable {
      * @return A list of generated images.
      */
     public List<SDImage> generateImage(int numInferenceSteps, String text, String negativeText, float guidanceScale, int batchSize, ImageSize size, int seed, Schedulers scheduler, Consumer<Integer> progressCallback) {
-        var request = new Request(text, negativeText, numInferenceSteps, guidanceScale, seed, size, scheduler, batchSize);
+        return generateImage(numInferenceSteps, text, negativeText, guidanceScale, batchSize, size, seed, scheduler, null, -1, progressCallback);
+    }
+
+    /**
+     * Generates a batch of images from the supplied prompts and parameters.
+     * @param numInferenceSteps The number of diffusion inference steps to take (commonly 20-50 for LMS and Euler Ancestral).
+     * @param text The text prompt.
+     * @param negativeText The negative text prompt which the image should not contain.
+     * @param guidanceScale The strength of the classifier-free guidance (i.e., how much should the image represent the text prompt).
+     * @param batchSize The number of images to generate.
+     * @param size The image size.
+     * @param seed The RNG seed, fixing the seed should produce identical images.
+     * @param scheduler The diffusion scheduling algorithm.
+     * @param intermediateOutputPath The output path for the intermediate images, set to null for no intermediate images.
+     * @param intermediateTimesteps The number of timesteps between intermediate images, set to -1 for no intermediate images.
+     * @param progressCallback A supplier which can be used to update a GUI. It is called after each diffusion step with the current step count.
+     * @return A list of generated images.
+     */
+    public List<SDImage> generateImage(int numInferenceSteps, String text, String negativeText, float guidanceScale, int batchSize, ImageSize size, int seed, Schedulers scheduler, Path intermediateOutputPath, int intermediateTimesteps, Consumer<Integer> progressCallback) {
+        var request = new Request(text, negativeText, numInferenceSteps, guidanceScale, seed, size, scheduler, batchSize, intermediateOutputPath, intermediateTimesteps);
         return generateImage(request, progressCallback);
     }
 
@@ -248,9 +280,25 @@ public final class SD4J implements AutoCloseable {
                 latentScalar = VAEDecoder.SD_LATENT_SCALAR;
             }
             logger.info("Generated embedding");
+            BiConsumer<FloatTensor, Integer> saveCallback = (FloatTensor f, Integer i) -> {
+                try {
+                    if (i % request.intermediateTimesteps == 0) {
+                        var image = vae.decodeToBufferedImage(f.copy(), latentScalar);
+                        System.out.println("Saving at index " + i);
+                        boolean[] valid = new boolean[image.size()];
+                        Arrays.fill(valid, true);
+                        var sdImages = wrap(image, request, valid);
+                        for (int j = 0; j < sdImages.size(); j++) {
+                            save(sdImages.get(j), request.intermediatePath.resolve("batch-"+j+"-timestep-"+i+".png"));
+                        }
+                    }
+                } catch (OrtException | IOException e) {
+                    throw new RuntimeException(e);
+                }
+            };
             FloatTensor latents = unet.inference(request.steps(), textEmbedding, pooledEmbedding,
                     request.guidance(), request.batchSize(), request.size().height(), request.size().width(),
-                    request.seed(), progressCallback, request.scheduler());
+                    request.seed(), progressCallback, request.scheduler(), saveCallback);
             logger.info("Generated latents");
             boolean[] isValid = new boolean[request.batchSize()];
             Arrays.fill(isValid, true);
@@ -375,6 +423,16 @@ public final class SD4J implements AutoCloseable {
             OrtEnvironment env = OrtEnvironment.getEnvironment();
             env.setTelemetry(false);
             final int deviceId = config.id();
+            Supplier<OrtSession.SessionOptions> cpuSupplier = () -> {
+                try {
+                    var opts = new OrtSession.SessionOptions();
+                    opts.setInterOpNumThreads(0);
+                    opts.setIntraOpNumThreads(0);
+                    return opts;
+                } catch (OrtException e) {
+                    throw new IllegalStateException("Failed to construct session options", e);
+                }
+            };
             logger.info("Config provider: " + config.provider);
             Supplier<OrtSession.SessionOptions> optsSupplier = switch (config.provider) {
                 case CUDA -> () -> {
@@ -397,7 +455,7 @@ public final class SD4J implements AutoCloseable {
                         var opts = new OrtSession.SessionOptions();
                         opts.setInterOpNumThreads(0);
                         opts.setIntraOpNumThreads(0);
-                        opts.addCoreML();
+                        opts.addCoreML(EnumSet.of(CoreMLFlags.CREATE_MLPROGRAM, CoreMLFlags.ENABLE_ON_SUBGRAPH));
                         return opts;
                     } catch (OrtException e) {
                         throw new IllegalStateException("Failed to construct session options", e);
@@ -428,16 +486,7 @@ public final class SD4J implements AutoCloseable {
                         throw new IllegalStateException("Failed to construct session options", e);
                     }
                 };
-                case CPU -> () -> {
-                    try {
-                        var opts = new OrtSession.SessionOptions();
-                        opts.setInterOpNumThreads(0);
-                        opts.setIntraOpNumThreads(0);
-                        return opts;
-                    } catch (OrtException e) {
-                        throw new IllegalStateException("Failed to construct session options", e);
-                    }
-                };
+                case CPU -> cpuSupplier;
             };
             TextEmbedder embedder = new TextEmbedder(tokenizerPath, encoderPath, optsSupplier.get(), config.type.textDimSize, false);
             logger.info("Loaded embedder from " + encoderPath);
@@ -539,10 +588,20 @@ public final class SD4J implements AutoCloseable {
      * @param size The requested image size.
      * @param scheduler The scheduling algorithm.
      * @param batchSize The batch size.
+     * @param intermediatePath The path to output the intermediate denoising images to.
+     * @param intermediateTimesteps The number of steps between each intermediate image.
      */
-    public record Request(String text, String negText, int steps, float guidance, int seed, ImageSize size, Schedulers scheduler, int batchSize) {
+    public record Request(String text, String negText, int steps, float guidance, int seed, ImageSize size, Schedulers scheduler, int batchSize, Path intermediatePath, int intermediateTimesteps) {
+        public Request {
+            if (intermediateTimesteps > 0 && intermediatePath == null) {
+                throw new IllegalArgumentException("Intermediate path required if intermediate timesteps is positive.");
+            }
+            if (intermediateTimesteps > steps) {
+                logger.warning("Intermediate timesteps must be less than steps, no intermediates will be generated.");
+            }
+        }
         Request(String text, String negText, String stepsStr, String guidanceStr, String seedStr, ImageSize size, Schedulers scheduler, String batchSize) {
-            this(text.strip(), negText.strip(), Integer.parseInt(stepsStr), Float.parseFloat(guidanceStr), Integer.parseInt(seedStr), size, scheduler, Integer.parseInt(batchSize));
+            this(text.strip(), negText.strip(), Integer.parseInt(stepsStr), Float.parseFloat(guidanceStr), Integer.parseInt(seedStr), size, scheduler, Integer.parseInt(batchSize), null, -1);
         }
     }
 
@@ -708,7 +767,7 @@ public final class SD4J implements AutoCloseable {
          * @return The help string.
          */
         public static String help() {
-            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU,OPENVINO} (optional --device-id <int> --model-type <sd1.5 or sd2>)";
+            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU,OPENVINO} (optional --device-id <int> --model-type <sd1.5,sd2,sdxl>)";
         }
     }
 }

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  ~ Copyright (c) 2023 Oracle and/or its affiliates.
+  ~ Copyright (c) 2023, 2025 Oracle and/or its affiliates.
   ~
   ~ The Universal Permissive License (UPL), Version 1.0
   ~
@@ -43,7 +43,7 @@
 
     <groupId>com.oracle.labs.mlrg</groupId>
     <artifactId>sd4j</artifactId>
-    <version>1.1-1.14.0</version>
+    <version>1.1-1.20.0</version>
 
     <name>sd4j</name>
     <url>https://labs.oracle.com</url>
@@ -53,6 +53,7 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
+        <onnxruntime.version>1.18.0</onnxruntime.version>
         <onnxruntime.version>1.20.0</onnxruntime.version>
         <executionProvider>CPU</executionProvider>
         <modelPath></modelPath>
@@ -86,7 +87,7 @@
             <groupId>org.tribuo</groupId>
             <artifactId>tribuo-util-onnx</artifactId>
             <scope>test</scope>
-            <version>4.3.1</version>
+            <version>4.3.2</version>
         </dependency>
     </dependencies>
 
