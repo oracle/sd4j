@@ -8,7 +8,7 @@ We will keep it current with the latest releases of ONNX Runtime, with appropria
 related ONNX Runtime features become available through the ONNX Runtime Java API. All the code is subject to change as
 this is a code sample, any APIs in it should not be considered stable.
 
-This repo targets ONNX Runtime 1.18. The version number is in two parts `<sd4j-version>-<onnxruntime-version>`, and the
+This repo targets ONNX Runtime 1.20. The version number is in two parts `<sd4j-version>-<onnxruntime-version>`, and the
 initial release of sd4j is v1.0-1.14.0. We'll bump the sd4j version number if it gains new features and the ONNX Runtime
 version number as we depend on newer versions of ONNX Runtime.
 
@@ -45,7 +45,7 @@ Text: "Professional photograph of George Washington in his garden grilling steak
 The SD4J project supports SD v1.5, SD v2 and SDXL style models. For models which do not support classifier-free guidance
 or negative prompts, such as SD-Turbo or SDXL-Turbo, the guidance scale should be set to a value less than 1.0 which
 disables that guidance. Models like SD-Turbo can generate acceptable images in as few as two diffusion steps. The 
-difference between SDv1 and SDv2 models is autodetected, but SDXL must be supplied as the model type for SDXL models
+difference between SDv1 and SDv2 models is autodetected, but `SDXL` must be supplied as the model type for SDXL models
 otherwise it will throw an exception on generation. In some cases the autodetection of v1 and v2 may fail in which case
 supplying the `--model-type {SD1.5, SD2, SDXL}` argument with the appropriate parameter will fix the model type.
 
@@ -57,14 +57,9 @@ automatically.
 
 ### Prepare model checkpoint
 
-There are many compatible models on [Hugging Face's website](https://huggingface.co). We have tested the
-Stable Diffusion v1.5 checkpoint, which has pre-built ONNX models. This can be downloaded via 
-the following `git` commands (skip the first one if you have already configured `git-lfs`):
-```bash
-git lfs install
-git clone https://huggingface.co/runwayml/stable-diffusion-v1-5 -b onnx
-```
-The Stable Diffusion v1.5 checkpoint is available under the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
+There are many compatible models on [Hugging Face's website](https://huggingface.co). We have tested several Stable Diffusion variants.
+The [Stable Diffusion v2.1 checkpoint](https://huggingface.co/stabilityai/stable-diffusion-2-1) is available under the [OpenRAIL++-M license](https://huggingface.co/stabilityai/stable-diffusion-2/blob/main/LICENSE-MODEL), and can be exported
+to ONNX format using Hugging Face's [diffusers library](https:://github.com/huggingface/diffusers) supplying `stabilityai/stable-diffusion-2-1` as the model path.
 For other SD models there is a one or two stage process to generate the ONNX format models. If the model is already in 
 Hugging Face Diffusers format then you can run the `convert_stable_diffusion_checkpoint_to_onnx.py` file from the 
 [diffusers](https://github.com/huggingface/diffusers) project as follows:
