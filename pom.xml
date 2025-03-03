@@ -54,6 +54,7 @@
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
         <onnxruntime.version>1.20.0</onnxruntime.version>
+        <executionProvider>CPU</executionProvider>
         <modelPath></modelPath>
     </properties>
 
@@ -151,7 +152,7 @@
                         <argument>--model-path</argument>
                         <argument>${modelPath}</argument>
                         <argument>--execution-provider</argument>
-                        <argument>CPU</argument>
+                        <argument>${executionProvider}</argument>
                     </arguments>
                 </configuration>
             </plugin>
