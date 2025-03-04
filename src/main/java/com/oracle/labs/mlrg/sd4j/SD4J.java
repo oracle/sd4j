@@ -40,6 +40,7 @@ package com.oracle.labs.mlrg.sd4j;
 
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
+import ai.onnxruntime.OrtProvider;
 import ai.onnxruntime.OrtSession;
 import ai.onnxruntime.providers.OrtCUDAProviderOptions;
 
@@ -374,6 +375,7 @@ public final class SD4J implements AutoCloseable {
             OrtEnvironment env = OrtEnvironment.getEnvironment();
             env.setTelemetry(false);
             final int deviceId = config.id();
+            logger.info("Config provider: " + config.provider);
             Supplier<OrtSession.SessionOptions> optsSupplier = switch (config.provider) {
                 case CUDA -> () -> {
                     try {
@@ -407,6 +409,20 @@ public final class SD4J implements AutoCloseable {
                         opts.setInterOpNumThreads(0);
                         opts.setIntraOpNumThreads(0);
                         opts.addDirectML(deviceId);
+                        return opts;
+                    } catch (OrtException e) {
+                        throw new IllegalStateException("Failed to construct session options", e);
+                    }
+                };
+                case OPENVINO -> () -> {
+                    if (!OrtEnvironment.getAvailableProviders().contains(OrtProvider.OPEN_VINO)) {
+                        throw new IllegalStateException("OpenVINO provider not available; available providers: " + OrtEnvironment.getAvailableProviders());
+                    }
+                    try {
+                        var opts = new OrtSession.SessionOptions();
+                        opts.setInterOpNumThreads(0);
+                        opts.setIntraOpNumThreads(0);
+                        opts.addOpenVINO("AUTO:CPU,NPU,GPU");
                         return opts;
                     } catch (OrtException e) {
                         throw new IllegalStateException("Failed to construct session options", e);
@@ -547,6 +563,10 @@ public final class SD4J implements AutoCloseable {
          */
         CUDA,
         /**
+         * OpenVINO.
+         */
+        OPENVINO,
+        /**
          * Windows DirectML devices.
          */
         DIRECT_ML;
@@ -562,6 +582,7 @@ public final class SD4J implements AutoCloseable {
                 case "cpu", "" -> CPU;
                 case "coreml", "core_ml", "core-ml" -> CORE_ML;
                 case "cuda" -> CUDA;
+                case "openvino" -> OPENVINO;
                 case "directml", "direct_ml", "direct-ml" -> DIRECT_ML;
                 default -> { throw new IllegalArgumentException("Unknown execution provider '" + name + "'"); }
             };
@@ -687,7 +708,7 @@ public final class SD4J implements AutoCloseable {
          * @return The help string.
          */
         public static String help() {
-            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU} (optional --device-id <int> --model-type <sd1.5 or sd2>)";
+            return "SD4J --model-path <model-path> --execution-provider {CUDA,CoreML,DirectML,CPU,OPENVINO} (optional --device-id <int> --model-type <sd1.5 or sd2>)";
         }
     }
 }

@@ -100,8 +100,15 @@ directly from other code.
 
 ### Using a CUDA GPU
 
-To use the GPU you need to modify the pom file to depend on `onnxruntime_gpu` and swap `<argument>CPU</argument>` for
-`<argument>CUDA</argument>` in the `exec-maven-plugin` block.
+To use the GPU you need to modify the pom file to depend on `onnxruntime_gpu` and swap `<executionProvider>CPU</executionProvider>` to
+`<executionProvider>CUDA</executionProvider>` in the Maven `<properties>` block.
+You can also specify `-DexecutionProvider=CUDA` when executing the GUI with `mvn package exec:exec`.
+
+### Using OpenVINO
+
+To enable OpenVINO acceleration, you need to ensure ONNX Runtime library referenced in the pom.xml has been build with OpenVINO explicitly enabled, so that the [OpenVINO Execution Provider](https://onnxruntime.ai/docs/build/eps.html) is included in the Java library pulled by the Maven reactor.
+Then you can swap `<executionProvider>CPU</executionProvider>` to
+`<executionProvider>OPENVINO</executionProvider>` in the Maven `<properties>` block; you can also specify `-DexecutionProvider=OPENVINO` when executing the GUI with `mvn package exec:exec`.
 
 ## Implementation details
 
