@@ -16,8 +16,9 @@ The project supports txt2img generation, it doesn't currently implement img2img,
 
 By default it uses a fp32 model, and running on a 6 core 2019 16" Intel Macbook Pro each diffusion step takes around 5s. 
 Running on better hardware, or with a CUDA GPU will greatly reduce the time taken to generate an image, as will using an
-SD-Turbo model. There is experimental support for the CoreML (for macOS) and DirectML (for Windows) backends, but proper 
-utilisation of these may require model changes like quantization which is not yet implemented.
+SD-Turbo model. There is experimental support for the CoreML (for macOS) and DirectML (for Windows) backends, but at the
+moment CoreML does not accelerate computation due to a lack of support for all the UNet operations in ONNX Runtime's 
+CoreML backend.
 
 ## Example images
 
@@ -44,7 +45,7 @@ Text: "Professional photograph of George Washington in his garden grilling steak
 The SD4J project supports SD v1.5, SD v2 and SDXL style models. For models which do not support classifier-free guidance
 or negative prompts, such as SD-Turbo or SDXL-Turbo, the guidance scale should be set to a value less than 1.0 which
 disables that guidance. Models like SD-Turbo can generate acceptable images in as few as two diffusion steps. The 
-difference between SDv1 and SDv2 models is autodetected, but SDXL must be supplied as the model type for SDXL models
+-difference between SDv1 and SDv2 models is autodetected, but `SDXL` must be supplied as the model type for SDXL models
 otherwise it will throw an exception on generation. In some cases the autodetection of v1 and v2 may fail in which case
 supplying the `--model-type {SD1.5, SD2, SDXL}` argument with the appropriate parameter will fix the model type.
 
@@ -56,16 +57,11 @@ The other dependencies (ONNX Runtime and Apache Commons Math) are downloaded by 
 
 ### Prepare model checkpoint
 
-There are many compatible models on [Hugging Face's website](https://huggingface.co). We have tested the
-Stable Diffusion v1.5 checkpoint, which has pre-built ONNX models. This can be downloaded via 
-the following `git` commands (skip the first one if you have already configured `git-lfs`):
-```bash
-git lfs install
-git clone https://huggingface.co/runwayml/stable-diffusion-v1-5 -b onnx
-```
-The Stable Diffusion v1.5 checkpoint is available under the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
-For other SD models there is a one or two stage process to generate the ONNX format models. If the model is already in 
-Hugging Face Diffusers format then you can run the `convert_stable_diffusion_checkpoint_to_onnx.py` file from the 
+There are many compatible models on [Hugging Face's website](https://huggingface.co). We have tested several Stable Diffusion variants.
+The [Stable Diffusion v2.1 checkpoint](https://huggingface.co/stabilityai/stable-diffusion-2-1) is available under the [OpenRAIL++-M license](https://huggingface.co/stabilityai/stable-diffusion-2/blob/main/LICENSE-MODEL), and can be exported
+to ONNX format using Hugging Face's [diffusers library](https:://github.com/huggingface/diffusers) supplying `stabilityai/stable-diffusion-2-1` as the model path.
+There is a one or two stage process to generate the ONNX format models depending on if the model is in Hugging Face Diffusers format, or the original Stable Diffusion format.
+If the model is already in Hugging Face Diffusers format then you can run the `convert_stable_diffusion_checkpoint_to_onnx.py` file from the 
 [diffusers](https://github.com/huggingface/diffusers) project as follows:
 ```bash
 python scripts/convert_stable_diffusion_checkpoint_to_onnx.py --model_path <path-on-disk-or-model-hub-name> --output_path <path-to-onnx-model-folder>
@@ -83,6 +79,7 @@ The scripts require a suitable Python 3 virtual environment with `diffusers`, `o
 installed.
 
 ### Setup ORT extensions
+
 You will also need to check out and compile onnxruntime-extensions for your platform. The repo is [https://github.com/microsoft/onnxruntime-extensions](https://github.com/microsoft/onnxruntime-extensions),
 and it can be compiled with `./build_lib.sh --config Release --update --build --parallel` which generates the required library (`libortextensions.[dylib,so]` or `ortextensions.dll`) in the
 `build/<OS-name>/Release/lib/` folder. That library should be copied into the root of this directory.
