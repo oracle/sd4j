@@ -67,7 +67,7 @@
         <dependency>
             <groupId>com.microsoft.onnxruntime</groupId>
             <artifactId>onnxruntime</artifactId>
-            <version>${onnxruntime.version}</version>
+            <version>1.20.0</version>
         </dependency>
         <!-- to enable CUDA uncomment this dependency and comment out the onnxruntime one
         <dependency>
@@ -86,7 +86,7 @@
             <groupId>org.tribuo</groupId>
             <artifactId>tribuo-util-onnx</artifactId>
             <scope>test</scope>
-            <version>4.3.1</version>
+            <version>4.3.2</version>
         </dependency>
     </dependencies>
 
