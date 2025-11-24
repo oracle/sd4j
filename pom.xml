@@ -53,7 +53,6 @@
         <maven.compiler.source>17</maven.compiler.source>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.release>17</maven.compiler.release>
-        <onnxruntime.version>1.18.0</onnxruntime.version>
         <onnxruntime.version>1.20.0</onnxruntime.version>
         <executionProvider>CPU</executionProvider>
         <modelPath></modelPath>
