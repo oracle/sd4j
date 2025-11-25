@@ -55,6 +55,8 @@ import javax.imageio.stream.FileImageOutputStream;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -280,22 +282,7 @@ public final class SD4J implements AutoCloseable {
                 latentScalar = VAEDecoder.SD_LATENT_SCALAR;
             }
             logger.info("Generated embedding");
-            BiConsumer<FloatTensor, Integer> saveCallback = (FloatTensor f, Integer i) -> {
-                try {
-                    if (i % request.intermediateTimesteps == 0) {
-                        var image = vae.decodeToBufferedImage(f.copy(), latentScalar);
-                        System.out.println("Saving at index " + i);
-                        boolean[] valid = new boolean[image.size()];
-                        Arrays.fill(valid, true);
-                        var sdImages = wrap(image, request, valid);
-                        for (int j = 0; j < sdImages.size(); j++) {
-                            save(sdImages.get(j), request.intermediatePath.resolve("batch-"+j+"-timestep-"+i+".png"));
-                        }
-                    }
-                } catch (OrtException | IOException e) {
-                    throw new RuntimeException(e);
-                }
-            };
+            BiConsumer<FloatTensor, Integer> saveCallback = createSaveCallback(request, latentScalar);
             FloatTensor latents = unet.inference(request.steps(), textEmbedding, pooledEmbedding,
                     request.guidance(), request.batchSize(), request.size().height(), request.size().width(),
                     request.seed(), progressCallback, request.scheduler(), saveCallback);
@@ -323,6 +310,31 @@ public final class SD4J implements AutoCloseable {
         } catch (OrtException e) {
             throw new IllegalStateException("Model inference failed.", e);
         }
+    }
+
+    private BiConsumer<FloatTensor, Integer> createSaveCallback(Request request, float latentScalar) {
+        BiConsumer<FloatTensor, Integer> saveCallback;
+        if (request.intermediateTimesteps > 0) {
+            saveCallback = (FloatTensor f, Integer i) -> {
+                try {
+                    if (i % request.intermediateTimesteps == 0) {
+                        var image = vae.decodeToBufferedImage(f.copy(), latentScalar);
+                        System.out.println("Saving at index " + i);
+                        boolean[] valid = new boolean[image.size()];
+                        Arrays.fill(valid, true);
+                        var sdImages = wrap(image, request, valid);
+                        for (int j = 0; j < sdImages.size(); j++) {
+                            save(sdImages.get(j), request.intermediatePath.resolve("batch-" + j + "-timestep-" + i + ".png"));
+                        }
+                    }
+                } catch (OrtException | IOException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+        } else {
+             saveCallback = (FloatTensor f, Integer i) -> {};
+        }
+        return saveCallback;
     }
 
     /**
@@ -599,9 +611,19 @@ public final class SD4J implements AutoCloseable {
             if (intermediateTimesteps > steps) {
                 logger.warning("Intermediate timesteps must be less than steps, no intermediates will be generated.");
             }
+            try {
+                if (intermediatePath != null) {
+                    Files.createDirectory(intermediatePath);
+                }
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
         }
         Request(String text, String negText, String stepsStr, String guidanceStr, String seedStr, ImageSize size, Schedulers scheduler, String batchSize) {
             this(text.strip(), negText.strip(), Integer.parseInt(stepsStr), Float.parseFloat(guidanceStr), Integer.parseInt(seedStr), size, scheduler, Integer.parseInt(batchSize), null, -1);
+        }
+        Request(String text, String negText, String stepsStr, String guidanceStr, String seedStr, ImageSize size, Schedulers scheduler, String batchSize, String intermediatePath, String intermediateTimesteps) {
+            this(text.strip(), negText.strip(), Integer.parseInt(stepsStr), Float.parseFloat(guidanceStr), Integer.parseInt(seedStr), size, scheduler, Integer.parseInt(batchSize), Path.of(intermediatePath), Integer.parseInt(intermediateTimesteps));
         }
     }
 

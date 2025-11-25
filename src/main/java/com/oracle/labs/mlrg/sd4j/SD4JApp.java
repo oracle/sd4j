@@ -214,15 +214,44 @@ public final class SD4JApp extends JFrame {
         batchField.setBorder(border5px.get());
         panel.add(batchField, constraints);
 
+        JLabel pathLbl = new JLabel("Intermediate steps path:");
+        constraints.gridx = 0;
+        constraints.gridy = 8;
+        pathLbl.setBorder(border5px.get());
+        panel.add(pathLbl, constraints);
+        JTextField pathField = new JTextField("");
+        constraints.gridx = 1;
+        constraints.gridy = 8;
+        pathField.setBorder(border5px.get());
+        panel.add(pathField, constraints);
+
+        JLabel interStepsLbl = new JLabel("Intermediate step freq:");
+        constraints.gridx = 0;
+        constraints.gridy = 9;
+        interStepsLbl.setBorder(border5px.get());
+        panel.add(interStepsLbl, constraints);
+        JTextField interStepsField = new JTextField("-1");
+        constraints.gridx = 1;
+        constraints.gridy = 9;
+        interStepsField.setBorder(border5px.get());
+        panel.add(interStepsField, constraints);
+
         JButton btn = new JButton("Generate");
         btn.addActionListener((ActionEvent e) -> {
-            var request = new SD4J.Request(textArea.getText(), negArea.getText(), stepsField.getText(),
-                    guidanceField.getText(), seedField.getText(), (SD4J.ImageSize) size.getSelectedItem(), (Schedulers) scheduler.getSelectedItem(),
-                    batchField.getText());
+            SD4J.Request request;
+            if (pathField.getText().isEmpty()) {
+                request = new SD4J.Request(textArea.getText(), negArea.getText(), stepsField.getText(),
+                        guidanceField.getText(), seedField.getText(), (SD4J.ImageSize) size.getSelectedItem(), (Schedulers) scheduler.getSelectedItem(),
+                        batchField.getText());
+            } else {
+                request = new SD4J.Request(textArea.getText(), negArea.getText(), stepsField.getText(),
+                        guidanceField.getText(), seedField.getText(), (SD4J.ImageSize) size.getSelectedItem(), (Schedulers) scheduler.getSelectedItem(),
+                        batchField.getText(), pathField.getText(), interStepsField.getText());
+            }
             SwingDisplayWindow.create(diff, request);
         });
         constraints.gridx = 1;
-        constraints.gridy = 8;
+        constraints.gridy = 10;
         btn.setBorder(border5px.get());
         panel.add(btn, constraints);
 
