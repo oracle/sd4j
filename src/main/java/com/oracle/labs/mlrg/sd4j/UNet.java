@@ -65,6 +65,7 @@ public final class UNet implements AutoCloseable {
     private final OrtSession unet;
 
     private final TensorInfo.OnnxTensorType timestepType;
+    private final boolean scalarTimestep;
 
     /**
      * Creates a UNet model with the default session options.
@@ -92,8 +93,31 @@ public final class UNet implements AutoCloseable {
         if (timestepNode != null) {
             var timestepTensorInfo = (TensorInfo) timestepNode.getInfo();
             this.timestepType = timestepTensorInfo.onnxType;
+            this.scalarTimestep = timestepTensorInfo.isScalar();
         } else {
             throw new IllegalArgumentException("Invalid unet, does not accept a timestep");
+        }
+    }
+
+    private OnnxTensor createTimestepTensor(long timestep) throws OrtException{
+        if (this.scalarTimestep) {
+            return switch (this.timestepType) {
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, (int) timestep);
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, timestep);
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT ->
+                        OnnxTensor.createTensor(env, (float) timestep);
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, (double)timestep);
+                default -> throw new IllegalStateException("Invalid tensor type for timestep tensor.");
+            };
+        } else {
+            return switch (this.timestepType) {
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, new int[]{(int) timestep});
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, new long[]{timestep});
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT ->
+                        OnnxTensor.createTensor(env, new float[]{timestep});
+                case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, new double[]{timestep});
+                default -> throw new IllegalStateException("Invalid tensor type for timestep tensor.");
+            };
         }
     }
 
@@ -111,13 +135,7 @@ public final class UNet implements AutoCloseable {
 
         map.put("encoder_hidden_states", encoderHiddenStates.wrapForORT(env));
         map.put("sample", sample.wrapForORT(env));
-        OnnxTensor timestepTensor = switch (this.timestepType) {
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, new int[]{(int) timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, new long[]{timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT -> OnnxTensor.createTensor(env, new float[]{timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, new double[]{timestep});
-            default -> throw new IllegalStateException("Invalid tensor type for timestep tensor.");
-        };
+        OnnxTensor timestepTensor = createTimestepTensor(timestep);
         map.put("timestep", timestepTensor);
     }
 
@@ -137,13 +155,7 @@ public final class UNet implements AutoCloseable {
 
         map.put("encoder_hidden_states", encoderHiddenStates.wrapForORT(env));
         map.put("sample", sample.wrapForORT(env));
-        OnnxTensor timestepTensor = switch (this.timestepType) {
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32 -> OnnxTensor.createTensor(env, new int[]{(int) timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64 -> OnnxTensor.createTensor(env, new long[]{timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT -> OnnxTensor.createTensor(env, new float[]{timestep});
-            case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE -> OnnxTensor.createTensor(env, new double[]{timestep});
-            default -> throw new IllegalStateException("Invalid tensor type for timestep tensor.");
-        };
+        OnnxTensor timestepTensor = createTimestepTensor(timestep);
         map.put("timestep", timestepTensor);
         map.put("text_embeds", textEmbeds.wrapForORT(env));
         map.put("time_ids", additionalImageInputs.wrapForORT(env));

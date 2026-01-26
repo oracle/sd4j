@@ -430,6 +430,7 @@ public final class SD4J implements AutoCloseable {
         var safetyPath = rootPath.resolve("safety_checker/model.onnx");
         var tokenizerPath = Path.of("text_tokenizer/custom_op_cliptok.onnx");
 
+        logger.info("Expected Model Type: " + config.type);
         try {
             // Initialize the library
             OrtEnvironment env = OrtEnvironment.getEnvironment();
@@ -701,7 +702,7 @@ public final class SD4J implements AutoCloseable {
             String lower = name.toLowerCase(Locale.US);
             return switch (lower) {
                 case "sdv1.5", "sd15", "sd1.5", "sd1_5", "sd1", "sdv1" -> SD1_5;
-                case "sdv2", "sdv21", "sdv2.1", "sd-turbo", "sd_turbo" -> SD2;
+                case "sdv2", "sd2", "sdv21", "sdv2.1", "sd-turbo", "sd_turbo" -> SD2;
                 case "sdxl", "sdxl-turbo", "sdxl_turbo" -> SDXL;
                 default -> { throw new IllegalArgumentException("Unknown model type '" + name + "'"); }
             };

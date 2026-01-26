@@ -38,6 +38,7 @@
 
 package com.oracle.labs.mlrg.sd4j;
 
+import ai.onnxruntime.OnnxJavaType;
 import ai.onnxruntime.OnnxTensor;
 import ai.onnxruntime.OrtEnvironment;
 import ai.onnxruntime.OrtException;
@@ -106,6 +107,7 @@ public final class TextEmbedder implements AutoCloseable {
     private final String tokenName;
     private final String poolName;
     private final int padToken;
+    private final boolean longIds;
 
     /**
      * Constructs a TextEmbedder from the supplied model and tokenizer using the default session options.
@@ -135,6 +137,8 @@ public final class TextEmbedder implements AutoCloseable {
         this.tokenizer = env.createSession(tokenizerPath.toString(), tokenizerOpts);
         this.textEmbedderOpts = embedderOpts;
         this.textEmbedder = env.createSession(embedderPath.toString(), textEmbedderOpts);
+        var inputInfo = textEmbedder.getInputInfo();
+        this.longIds = ((TensorInfo) inputInfo.get("input_ids").getInfo()).type == OnnxJavaType.INT64;
         var outputInfo = textEmbedder.getOutputInfo();
         this.isXL = isXL;
         if (isXL) {
@@ -236,7 +240,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     private EmbeddingOutput embedTokens(IntTensor tokenIds) throws OrtException {
-        Tensor<?> ids = isXL ? tokenIds.convertToLongTensor() : tokenIds;
+        Tensor<?> ids = longIds ? tokenIds.convertToLongTensor() : tokenIds;
         try (OnnxTensor input = ids.wrapForORT(env);
             OrtSession.Result output = textEmbedder.run(Map.of("input_ids", input))) {
             var tokenBuffer = ((OnnxTensor) output.get(tokenName).get()).getFloatBuffer();
