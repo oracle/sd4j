@@ -45,12 +45,11 @@ import ai.onnxruntime.OrtException;
 import ai.onnxruntime.OrtSession;
 import ai.onnxruntime.TensorInfo;
 
+import java.io.IOException;
 import java.nio.IntBuffer;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Pattern;
 
 /**
  * The text embedding model, usually a CLIP variant, loaded in via ONNX Runtime.
@@ -60,21 +59,9 @@ public final class TextEmbedder implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(TextEmbedder.class.getName());
 
     /**
-     * Max length of the CLIP token output.
-     */
-    public static final int MAX_LENGTH = 77;
-    /**
-     * Pad and EOS token id in regular SD models.
-     */
-    public static final int PAD_TOKEN = 49407;
-    /**
      * Pad token id in the second embedder in an SDXL model.
      */
     public static final int PAD_XL_TOKEN = 0;
-    /**
-     * BOS token id.
-     */
-    public static final int BOS_TOKEN = 49406;
     /**
      * Output dimensionality for Stable Diffusion v1.5 style models.
      */
@@ -88,15 +75,9 @@ public final class TextEmbedder implements AutoCloseable {
      */
     public static final int SDXL_DIM_SIZE = 1280;
 
-    /**
-     * Pattern which matches linefeeds as they crash the tokenizer.
-     */
-    private static final Pattern NEWLINE_PATTERN = Pattern.compile("\\R");
-
     private final OrtEnvironment env;
 
-    private final OrtSession.SessionOptions tokenizerOpts;
-    private final OrtSession tokenizer;
+    private final CLIPTokenizer tokenizer;
 
     private final OrtSession.SessionOptions textEmbedderOpts;
     private final OrtSession textEmbedder;
@@ -111,7 +92,7 @@ public final class TextEmbedder implements AutoCloseable {
 
     /**
      * Constructs a TextEmbedder from the supplied model and tokenizer using the default session options.
-     * @param tokenizerPath The path to the tokenizer model.
+     * @param tokenizerPath The path to the tokenizer directory containing {@code merges.txt} and {@code vocab.json}.
      * @param embedderPath The path to the text embedding model, usually a CLIP variant.
      * @param defaultSize The default size of the text embedding if it cannot be extracted from the model file.
      * @throws OrtException If the model could not be loaded.
@@ -123,18 +104,21 @@ public final class TextEmbedder implements AutoCloseable {
     /**
      * Constructs a TextEmbedder from the supplied model and tokenizer.
      * <p>
-     * The model is constructed using the supplied session options, the tokenizer uses the default options.
-     * @param tokenizerPath The path to the tokenizer model.
+     * The model is constructed using the supplied session options.
+     * @param tokenizerPath The path to the tokenizer directory containing {@code merges.txt} and {@code vocab.json}.
      * @param embedderPath The path to the text embedding model, usually a CLIP variant.
      * @param embedderOpts The session options for the text embedding model.
      * @param defaultSize The default size of the text embedding if it cannot be extracted from the model file.
      * @throws OrtException If the model could not be loaded.
+     * @throws IllegalArgumentException If the tokenizer could not be loaded.
      */
     public TextEmbedder(Path tokenizerPath, Path embedderPath, OrtSession.SessionOptions embedderOpts, int defaultSize, boolean isXL) throws OrtException {
         this.env = OrtEnvironment.getEnvironment();
-        this.tokenizerOpts = new OrtSession.SessionOptions();
-        this.tokenizerOpts.registerCustomOpLibrary("./"+System.mapLibraryName("ortextensions"));
-        this.tokenizer = env.createSession(tokenizerPath.toString(), tokenizerOpts);
+        try {
+            this.tokenizer = CLIPTokenizer.fromPath(tokenizerPath);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Failed to load tokenizer from " + tokenizerPath, e);
+        }
         this.textEmbedderOpts = embedderOpts;
         this.textEmbedder = env.createSession(embedderPath.toString(), textEmbedderOpts);
         var inputInfo = textEmbedder.getInputInfo();
@@ -149,7 +133,7 @@ public final class TextEmbedder implements AutoCloseable {
         } else {
             tokenName = "last_hidden_state";
             poolName = "pooler_output";
-            padToken = PAD_TOKEN;
+            padToken = CLIPTokenizer.PAD_TOKEN;
         }
         if (!outputInfo.containsKey(tokenName)) {
             throw new IllegalArgumentException("Failed to find ONNX output '" + tokenName + "' used as the token embedding in model loaded from " + embedderPath);
@@ -182,51 +166,15 @@ public final class TextEmbedder implements AutoCloseable {
     }
 
     /**
-     * Tokenizes the supplied text using the tokenization model.
-     * @param text The text to tokenize.
-     * @return An int buffer containing the token ids.
-     * @throws OrtException If the tokenization model failed.
-     */
-    private IntBuffer tokenizeText(String text) throws OrtException {
-        String textInput = NEWLINE_PATTERN.matcher(text).replaceAll("");
-        try (OnnxTensor input = OnnxTensor.createTensor(env, new String[]{textInput}, new long[]{1});
-             OrtSession.Result output = tokenizer.run(Map.of("string_input", input))) {
-            var outputTensor = (OnnxTensor) output.get(0);
-            var idBuffer = outputTensor.getLongBuffer();
-            if (logger.isLoggable(Level.FINE)) {
-                var sb = new StringBuilder();
-                sb.append("Ids - [");
-                for (int i = 0; i < idBuffer.limit(); i++) {
-                    sb.append(" ");
-                    sb.append(idBuffer.get());
-                }
-                sb.replace(sb.length() - 1, sb.length(), "]");
-                logger.fine(sb.toString());
-                idBuffer.rewind();
-            }
-            IntBuffer intBuffer = IntBuffer.allocate(MAX_LENGTH);
-            int pos = 0;
-            for (int i = 0; i < idBuffer.limit() && pos < intBuffer.capacity(); i++, pos++) {
-                intBuffer.put((int)idBuffer.get(i));
-            }
-            for (; pos < intBuffer.capacity(); pos++) {
-                intBuffer.put(padToken);
-            }
-            intBuffer.rewind();
-            return intBuffer;
-        }
-    }
-
-    /**
-     * Generates an int buffer containing {@link #BOS_TOKEN}, {@link #PAD_TOKEN} then {@link #MAX_LENGTH} - 1 of the
-     * correct pad token for the model (either {@link #PAD_TOKEN} or {@link #PAD_XL_TOKEN}).
+     * Generates an int buffer containing {@link CLIPTokenizer#BOS_TOKEN}, {@link CLIPTokenizer#PAD_TOKEN} then {@link CLIPTokenizer#MAX_LENGTH} - 1 of the
+     * correct pad token for the model (either {@link CLIPTokenizer#PAD_TOKEN} or {@link #PAD_XL_TOKEN}).
      * @return The unconditional tokens.
      */
     private IntBuffer unconditionalTokens() {
-        IntBuffer output = IntBuffer.allocate(MAX_LENGTH);
-        output.put(BOS_TOKEN);
-        output.put(PAD_TOKEN); // EOS token for both models
-        for (int pos = 2; pos < MAX_LENGTH; pos++) {
+        IntBuffer output = IntBuffer.allocate(CLIPTokenizer.MAX_LENGTH);
+        output.put(CLIPTokenizer.BOS_TOKEN);
+        output.put(CLIPTokenizer.PAD_TOKEN); // EOS token for both models
+        for (int pos = 2; pos < CLIPTokenizer.MAX_LENGTH; pos++) {
             output.put(padToken);
         }
         output.rewind();
@@ -244,7 +192,7 @@ public final class TextEmbedder implements AutoCloseable {
         try (OnnxTensor input = ids.wrapForORT(env);
             OrtSession.Result output = textEmbedder.run(Map.of("input_ids", input))) {
             var tokenBuffer = ((OnnxTensor) output.get(tokenName).get()).getFloatBuffer();
-            FloatTensor tokenEmbeddings = new FloatTensor(tokenBuffer, new long[]{tokenIds.shape[0], MAX_LENGTH, dimSize});
+            FloatTensor tokenEmbeddings = new FloatTensor(tokenBuffer, new long[]{tokenIds.shape[0], CLIPTokenizer.MAX_LENGTH, dimSize});
             var poolBuffer = ((OnnxTensor) output.get(poolName).get()).getFloatBuffer();
             FloatTensor poolEmbeddings = new FloatTensor(poolBuffer, new long[]{tokenIds.shape[0], dimSize});
             return new EmbeddingOutput(tokenEmbeddings, poolEmbeddings);
@@ -259,7 +207,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     public EmbeddingOutput embedText(String text, int batchSize) throws OrtException {
-        IntBuffer ids = tokenizeText(text);
+        IntBuffer ids = tokenizer.tokenize(text);
         return embedText(batchSize, ids);
     }
 
@@ -271,7 +219,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     public EmbeddingOutput embedTextAndUncond(String text, int batchSize) throws OrtException {
-        IntBuffer ids = tokenizeText(text);
+        IntBuffer ids = tokenizer.tokenize(text);
         IntBuffer uncond = unconditionalTokens();
         return embedText(batchSize, ids, uncond);
     }
@@ -285,8 +233,8 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     public EmbeddingOutput embedTextAndNegative(String text, String negative, int batchSize) throws OrtException {
-        IntBuffer ids = tokenizeText(text);
-        IntBuffer negativeIds = tokenizeText(negative);
+        IntBuffer ids = tokenizer.tokenize(text);
+        IntBuffer negativeIds = tokenizer.tokenize(negative);
         return embedText(batchSize, ids, negativeIds);
     }
 
@@ -298,7 +246,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     private EmbeddingOutput embedText(int batchSize, IntBuffer positiveTokens) throws OrtException {
-        IntTensor idTensor = new IntTensor(new long[]{batchSize, MAX_LENGTH});
+        IntTensor idTensor = new IntTensor(new long[]{batchSize, CLIPTokenizer.MAX_LENGTH});
         for (int i = 0; i < batchSize; i++) {
             idTensor.buffer.put(positiveTokens);
             positiveTokens.rewind();
@@ -316,7 +264,7 @@ public final class TextEmbedder implements AutoCloseable {
      * @throws OrtException If the model call failed.
      */
     private EmbeddingOutput embedText(int batchSize, IntBuffer positiveTokens, IntBuffer negativeTokens) throws OrtException {
-        IntTensor idTensor = new IntTensor(new long[]{batchSize*2L, MAX_LENGTH});
+        IntTensor idTensor = new IntTensor(new long[]{batchSize*2L, CLIPTokenizer.MAX_LENGTH});
         for (int i = 0; i < batchSize; i++) {
             idTensor.buffer.put(negativeTokens);
             negativeTokens.rewind();
@@ -333,9 +281,6 @@ public final class TextEmbedder implements AutoCloseable {
     public void close() throws OrtException {
         textEmbedder.close();
         textEmbedderOpts.close();
-
-        tokenizer.close();
-        tokenizerOpts.close();
     }
 
     /**
