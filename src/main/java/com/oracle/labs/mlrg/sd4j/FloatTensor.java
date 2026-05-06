@@ -202,6 +202,6 @@ public final class FloatTensor extends Tensor<FloatBuffer> {
         if (elements < 0) {
             throw new IllegalArgumentException("Invalid shape for Java tensor, expected less than Integer.MAX_VALUE elements, found " + Arrays.toString(shape));
         }
-        return ByteBuffer.allocateDirect(elements * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+        return ByteBuffer.allocateDirect(Math.multiplyExact(elements,Float.BYTES)).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
     }
 }

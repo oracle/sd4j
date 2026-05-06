@@ -54,8 +54,6 @@ import java.util.stream.IntStream;
 public final class LMSDiscreteScheduler implements Scheduler {
     private static final Logger logger = Logger.getLogger(LMSDiscreteScheduler.class.getName());
 
-    private static final RombergIntegrator integrator = new RombergIntegrator();
-
     private final int numTrainTimesteps;
     private final float[] alphasCumulativeProducts;
     private final float[] initialVariance;
@@ -168,8 +166,8 @@ public final class LMSDiscreteScheduler implements Scheduler {
      * @return The LMS coefficient.
      */
     private double getLmsCoefficient(int order, int t, int currentOrder) {
+        RombergIntegrator integrator = new RombergIntegrator();
         // Compute a linear multistep coefficient.
-
         UnivariateFunction lmsDerivative = (double tau) -> {
             double prod = 1.0;
             for (int k = 0; k < order; k++) {

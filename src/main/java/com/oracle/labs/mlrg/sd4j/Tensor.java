@@ -143,19 +143,16 @@ public sealed abstract class Tensor<B extends Buffer> permits FloatTensor, IntTe
      * @return The number of elements.
      */
     protected static int computeNumElements(long[] shape) {
-        int total = 1;
-        for (int i = 0; i < shape.length; i++) {
-            long cur = shape[i];
-            if ((((int) cur) != cur) || (cur < 0)){
-                total = -1;
-                break;
-            } else {
-                total *= cur;
-                if (total <= 0) {
-                    break;
-                }
+        long product = 1;
+        for (long cur : shape) {
+            if (cur < 0 || cur > Integer.MAX_VALUE) {
+                return -1;
+            }
+            product *= cur;
+            if (product > Integer.MAX_VALUE) {
+                return -1;
             }
         }
-        return total;
+        return (int) product;
     }
 }
