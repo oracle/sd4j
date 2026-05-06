@@ -52,7 +52,7 @@ supplying the `--model-type {SD1.5, SD2, SDXL}` argument with the appropriate pa
 ## Installation
 
 This project requires [Apache Maven](https://maven.apache.org), [Java 17 or newer](https://www.oracle.com/java/technologies/downloads/),
-a compiled ONNX Runtime extensions binary, and a Stable Diffusion model checkpoint.
+and a Stable Diffusion model checkpoint exported to ONNX format.
 The other dependencies (ONNX Runtime and Apache Commons Math) are downloaded by Maven automatically.
 
 ### Prepare model checkpoint
@@ -76,13 +76,8 @@ using [optimum](https://github.com/huggingface/optimum):
 optimum-cli export onnx --model <model-hub-name> <path-to-onnx-model-folder>
 ```
 The scripts require a suitable Python 3 virtual environment with `diffusers`, `onnxruntime`, `optimum` and `onnx` 
-installed.
-
-### Setup ORT extensions
-
-You will also need to check out and compile onnxruntime-extensions for your platform. The repo is [https://github.com/microsoft/onnxruntime-extensions](https://github.com/microsoft/onnxruntime-extensions),
-and it can be compiled with `./build_lib.sh --config Release --update --build --parallel` which generates the required library (`libortextensions.[dylib,so]` or `ortextensions.dll`) in the
-`build/<OS-name>/Release/lib/` folder. That library should be copied into the root of this directory.
+installed. The exported model directory must include `tokenizer/merges.txt` and `tokenizer/vocab.json`; they define
+the tokenizer for the text embedding model, which is expected to be a CLIP-style BPE tokenizer.
 
 ## Running the GUI
 
@@ -129,7 +124,3 @@ a Stable Diffusion model architecture checkpoint to work, and any Stable Diffusi
 licenses. There are 1000+ compatible models available
 on [Hugging Face](https://huggingface.co/models?other=stable-diffusion) each of which are licensed separately, though many use a variant of
 the [OpenRAIL-M license](https://github.com/CompVis/stable-diffusion/blob/main/LICENSE).
-
-The [tokenizer onnx model](text_tokenizer/custom_op_cliptok.onnx) is taken from the 
-[C# implementation](https://github.com/cassiebreviu/StableDiffusion/), and is available under the MIT license. More 
-details on the tokenizer are available in its [README file](text_tokenizer/README.md).

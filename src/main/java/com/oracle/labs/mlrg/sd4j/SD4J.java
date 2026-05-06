@@ -377,7 +377,7 @@ public final class SD4J implements AutoCloseable {
      *     <li>Text Encoder - $initialPath/text_encoder/model.onnx</li>
      *     <li>UNet - $initialPath/unet/model.onnx</li>
      *     <li>Safety checker - $initialPath/safety_checker/model.onnx</li>
-     *     <li>Tokenizer - $pwd/text_tokenizer/custom_op_cliptok.onnx</li>
+     *     <li>Tokenizer - $initialPath/tokenizer/merges.txt and $initialPath/tokenizer/vocab.json</li>
      * </ul>
      * @param initialPath The path to the set of models.
      * @return The SD4J pipeline running on CPUs.
@@ -395,7 +395,7 @@ public final class SD4J implements AutoCloseable {
      *     <li>Text Encoder - $initialPath/text_encoder/model.onnx</li>
      *     <li>UNet - $initialPath/unet/model.onnx</li>
      *     <li>Safety checker - $initialPath/safety_checker/model.onnx</li>
-     *     <li>Tokenizer - $pwd/text_tokenizer/custom_op_cliptok.onnx</li>
+     *     <li>Tokenizer - $initialPath/tokenizer/merges.txt and $initialPath/tokenizer/vocab.json</li>
      * </ul>
      * @param initialPath The path to the set of models.
      * @param useCUDA Should the text encoder, unet, vae and safety checker be run on GPU?
@@ -415,7 +415,7 @@ public final class SD4J implements AutoCloseable {
      *     <li>Text Encoder XL - $initialPath/text_encoder_2/model.onnx</li>
      *     <li>UNet - $initialPath/unet/model.onnx</li>
      *     <li>Safety checker - $initialPath/safety_checker/model.onnx</li>
-     *     <li>Tokenizer - $pwd/text_tokenizer/custom_op_cliptok.onnx</li>
+     *     <li>Tokenizer - $initialPath/tokenizer/merges.txt and $initialPath/tokenizer/vocab.json</li>
      * </ul>
      * @param config The SD4J configuration.
      * @return The SD4J pipeline.
@@ -428,7 +428,7 @@ public final class SD4J implements AutoCloseable {
         var encoderXLPath = rootPath.resolve("text_encoder_2/model.onnx");
         var unetPath = rootPath.resolve("unet/model.onnx");
         var safetyPath = rootPath.resolve("safety_checker/model.onnx");
-        var tokenizerPath = Path.of("text_tokenizer/custom_op_cliptok.onnx");
+        var tokenizerPath = rootPath.resolve("tokenizer");
 
         logger.info("Expected Model Type: " + config.type);
         try {
